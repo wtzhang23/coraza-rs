@@ -1,0 +1,12 @@
+[package]
+name = "coraza-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+coraza-sys = { version = "~0.1.0", path = "../coraza-sys" }
+cstr-argument.workspace = true
+http.workspace = true
+libc.workspace = true
+strum = { workspace = true, features = ["derive"] }
+thiserror.workspace = true

@@ -1,3 +1,10 @@
 [workspace]
 resolver = "3"
-members = ["coraza-sys"]
+members = [ "coraza-rs","coraza-sys"]
+
+[workspace.dependencies]
+cstr-argument = "0.1.2"
+http = "1.4.0"
+libc = "0.2.178"
+strum = "0.27.2"
+thiserror = "2.0.17"
