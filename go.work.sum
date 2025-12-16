@@ -1,0 +1,5 @@
+github.com/anuraaga/go-modsecurity v0.0.0-20220824035035-b9a4099778df/go.mod h1:7jguE759ADzy2EkxGRXigiC0ER1Yq2IFk2qNtwgzc7U=
+github.com/mccutchen/go-httpbin/v2 v2.9.0/go.mod h1:+DBHcmg6EOeoizuiOI8iL12VIHXx+9YQNlz+gjB9uxk=
+golang.org/x/crypto v0.15.0/go.mod h1:4ChreQoLWfG3xLDer1WdlH5NdlQ3+mwnQq1YTKY+72g=
+golang.org/x/term v0.14.0/go.mod h1:TySc+nGkYR6qt8km8wUhuFRTVSMIX3XPR58y2lC8vww=
+golang.org/x/text v0.14.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=
