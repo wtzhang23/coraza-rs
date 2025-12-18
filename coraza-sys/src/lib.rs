@@ -15,9 +15,9 @@ mod tests {
     }
 
     #[test]
+    /// This test is a port of the simple_get.c example from the libcoraza repository.
     fn simple_get() {
         unsafe {
-            // This is a port of the simple_get.c example from the libcoraza repository
             let waf = coraza_new_waf();
             assert_ne!(waf, 0);
             coraza_set_log_cb(waf, Some(log_cb));
