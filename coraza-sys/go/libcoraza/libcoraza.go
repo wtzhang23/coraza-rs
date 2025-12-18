@@ -15,9 +15,9 @@ typedef struct coraza_intervention_t
     int disruptive;
 } coraza_intervention_t;
 
-typedef uint64_t coraza_waf_config_t;
-typedef uint64_t coraza_waf_t;
-typedef uint64_t coraza_transaction_t;
+typedef uintptr_t coraza_waf_config_t;
+typedef uintptr_t coraza_waf_t;
+typedef uintptr_t coraza_transaction_t;
 
 typedef void (*coraza_log_cb) (const void *);
 void send_log_to_cb(coraza_log_cb cb, const char *msg);
@@ -354,7 +354,7 @@ func configMapInsert(handle *WafConfigHandle) C.coraza_waf_config_t {
 }
 
 func configMapDelete(config C.coraza_waf_config_t) {
-	ptr := uint64(config)
+	ptr := uintptr(config)
 	configMap.Delete(ptr)
 }
 
@@ -365,7 +365,7 @@ func wafMapInsert(handle *WafHandle) C.coraza_waf_t {
 }
 
 func wafMapDelete(waf C.coraza_waf_t) {
-	ptr := uint64(waf)
+	ptr := uintptr(waf)
 	wafMap.Delete(ptr)
 }
 
@@ -376,12 +376,12 @@ func txMapInsert(tx types.Transaction) C.coraza_transaction_t {
 }
 
 func txMapDelete(tx C.coraza_transaction_t) {
-	ptr := uint64(tx)
+	ptr := uintptr(tx)
 	txMap.Delete(ptr)
 }
 
 func ptrToWafConfigHandle(config C.coraza_waf_config_t) *WafConfigHandle {
-	ptr := uint64(config)
+	ptr := uintptr(config)
 	handle, ok := configMap.Load(ptr)
 	if !ok {
 		return nil
@@ -390,7 +390,7 @@ func ptrToWafConfigHandle(config C.coraza_waf_config_t) *WafConfigHandle {
 }
 
 func ptrToWafHandle(waf C.coraza_waf_t) *WafHandle {
-	ptr := uint64(waf)
+	ptr := uintptr(waf)
 	handle, ok := wafMap.Load(ptr)
 	if !ok {
 		return nil
@@ -399,7 +399,7 @@ func ptrToWafHandle(waf C.coraza_waf_t) *WafHandle {
 }
 
 func ptrToTransaction(t C.coraza_transaction_t) types.Transaction {
-	ptr := uint64(t)
+	ptr := uintptr(t)
 	tx, ok := txMap.Load(ptr)
 	if !ok {
 		return nil
@@ -407,16 +407,16 @@ func ptrToTransaction(t C.coraza_transaction_t) types.Transaction {
 	return tx.(types.Transaction)
 }
 
-func transactionToPtr(tx types.Transaction) uint64 {
-	return uint64(reflect.ValueOf(&tx).Pointer())
+func transactionToPtr(tx types.Transaction) uintptr {
+	return reflect.ValueOf(&tx).Pointer()
 }
 
-func wafToPtr(waf *WafHandle) uint64 {
-	return uint64(reflect.ValueOf(&waf).Pointer())
+func wafToPtr(waf *WafHandle) uintptr {
+	return reflect.ValueOf(&waf).Pointer()
 }
 
-func wafConfigHandleToPtr(config *WafConfigHandle) uint64 {
-	return uint64(reflect.ValueOf(&config).Pointer())
+func wafConfigHandleToPtr(config *WafConfigHandle) uintptr {
+	return reflect.ValueOf(&config).Pointer()
 }
 
 // It should just be C.CString(s) but we need this to build tests
