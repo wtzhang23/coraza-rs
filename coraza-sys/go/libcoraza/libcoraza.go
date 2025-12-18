@@ -18,7 +18,7 @@ typedef struct coraza_intervention_t
 typedef uintptr_t coraza_waf_config_t;
 typedef uintptr_t coraza_waf_t;
 typedef uintptr_t coraza_transaction_t;
-typedef uintptr_t coraza_error_t;
+typedef char *coraza_error_t;
 
 typedef void (*coraza_log_cb) (const void *);
 void send_log_to_cb(coraza_log_cb cb, const char *msg);
