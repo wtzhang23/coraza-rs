@@ -8,23 +8,16 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 mod tests {
     use super::*;
 
-    extern "C" fn log_cb(data: *const std::ffi::c_void) {
-        println!("{}", unsafe {
-            std::ffi::CStr::from_ptr(data as *const i8).to_string_lossy()
-        });
-    }
-
     #[test]
     /// This test is a port of the simple_get.c example from the libcoraza repository.
     fn simple_get() {
         unsafe {
             let waf = coraza_new_waf();
             assert_ne!(waf, 0);
-            coraza_set_log_cb(waf, Some(log_cb));
             let mut err = std::ptr::null_mut();
             coraza_rules_add(waf, c"SecRule REMOTE_ADDR \"127.0.0.1\" \"id:1,phase:1,deny,log,msg:'test 123',status:403\"".as_ptr() as *mut _, &mut err);
             assert!(err.is_null());
-            let tx = coraza_new_transaction(waf, log_cb as *mut std::ffi::c_void);
+            let tx = coraza_new_transaction(waf);
             coraza_process_connection(
                 tx,
                 c"127.0.0.1".as_ptr() as *mut _,

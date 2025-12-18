@@ -1,4 +1,4 @@
-name: E2E Tests
+name: Build and Test
 
 on:
   push:
@@ -7,10 +7,49 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+
+      - name: Install Autotools
+        run: sudo apt-get update && sudo apt-get install -y autoconf automake libtool m4 make golang-go
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run Rust tests
+        run: cargo test --verbose
+
+      - name: Run Go tests
+        working-directory: coraza-sys/go/libcoraza
+        run: go test ./...
+
+      - name: Build
+        run: cargo build --verbose
+
   e2e:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
