@@ -118,18 +118,14 @@ func coraza_new_waf_with_config(c C.coraza_waf_config_t, er *C.coraza_error_t) C
 func coraza_new_transaction(waf C.coraza_waf_t) C.coraza_transaction_t {
 	handle := ptrToWafHandle(waf)
 	tx := handle.waf.NewTransaction()
-	ptr := transactionToPtr(tx)
-	txMapInsert(tx)
-	return C.coraza_transaction_t(ptr)
+	return txMapInsert(tx)
 }
 
 //export coraza_new_transaction_with_id
 func coraza_new_transaction_with_id(waf C.coraza_waf_t, id *C.char) C.coraza_transaction_t {
 	handle := ptrToWafHandle(waf)
 	tx := handle.waf.NewTransactionWithID(C.GoString(id))
-	ptr := transactionToPtr(tx)
-	txMapInsert(tx)
-	return C.coraza_transaction_t(ptr)
+	return txMapInsert(tx)
 }
 
 //export coraza_intervention

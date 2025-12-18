@@ -1,0 +1,7 @@
+# Linker configuration for macOS dynamic modules
+# This allows undefined symbols that will be resolved at runtime by Envoy
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-undefined,dynamic_lookup"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-undefined,dynamic_lookup"]
