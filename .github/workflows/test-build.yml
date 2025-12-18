@@ -25,6 +25,8 @@ jobs:
           toolchain: stable
           profile: minimal
           override: true
+      - name: Set up Rust cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Set up Go
         uses: actions/setup-go@v6
