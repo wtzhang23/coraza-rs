@@ -11,13 +11,18 @@ use crate::{filter::CorazaFilter, metrics::CorazaFilterMetrics};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CorazaSettings {
     pub metric_labels: Option<HashMap<String, String>>,
-    pub directives_map: Option<HashMap<String, Vec<Rule>>>,
+    pub directives_map: Option<HashMap<String, Directives>>,
     pub default_directives: Option<String>,
     pub connection_config: Option<ConnectionConfig>,
     pub request_config: Option<RequestConfig>,
     pub response_config: Option<ResponseConfig>,
     #[serde(default)]
     pub fail_closed: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Directives {
+    pub rules: Vec<Rule>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -108,7 +113,7 @@ impl CorazaFilterConfig {
             .flat_map(|dirs| dirs.iter())
             .map(|(name, directives)| {
                 let mut waf = Waf::new()?;
-                for directive in directives {
+                for directive in directives.rules.iter() {
                     match directive {
                         Rule::File(path) => waf
                             .add_rule_from_file(path.to_str()?)
