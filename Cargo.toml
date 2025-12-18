@@ -6,7 +6,6 @@ members = ["coraza-dynamic-module", "coraza-rs", "coraza-sys"]
 cstr-argument = "0.1.2"
 envoy-proxy-dynamic-modules-rust-sdk = { git = "https://github.com/envoyproxy/envoy", rev = "v1.36.4" }
 http = "1.4.0"
-libc = "0.2.178"
 parking_lot = "0.12.5"
 serde = "1.0.228"
 serde_json = "1.0.145"

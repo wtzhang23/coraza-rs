@@ -9,11 +9,62 @@ use thiserror::Error;
 pub enum Error {
     #[error("Processing failed")]
     ProcessingFailed,
-    #[error("Invalid rule: {0}")]
-    InvalidRule(String),
+    #[error("Failed to create WAF: {0}")]
+    FailedToCreateWaf(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub struct WafConfig {
+    inner: coraza_waf_config_t,
+}
+
+impl WafConfig {
+    pub fn new() -> Self {
+        Self {
+            inner: unsafe { coraza_new_waf_config() },
+        }
+    }
+
+    /// Add rules to the WAF config.
+    ///
+    /// # Arguments
+    ///
+    /// * `rules` - The rules to add.
+    pub fn add_rules<CStrArg: CStrArgument>(&mut self, rule: CStrArg) {
+        unsafe {
+            coraza_add_rules_to_waf_config(self.inner, rule.into_cstr().as_ref().as_ptr() as *mut _)
+        };
+    }
+
+    /// Add rules from a file to the WAF config.
+    ///
+    /// # Arguments
+    ///
+    /// * `file` - The file to add rules from.
+    pub fn add_rules_from_file<CStrArg: CStrArgument>(&mut self, file: CStrArg) {
+        unsafe {
+            coraza_add_rules_from_file_to_waf_config(
+                self.inner,
+                file.into_cstr().as_ref().as_ptr() as *mut _,
+            )
+        };
+    }
+}
+
+impl Default for WafConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for WafConfig {
+    fn drop(&mut self) {
+        let rv = unsafe { coraza_free_waf_config(self.inner) };
+        debug_assert!(rv == 0, "Failed to free WAF config");
+    }
+}
 
 #[derive(Debug)]
 pub struct Waf {
@@ -32,13 +83,19 @@ impl Waf {
     /// # Thread Safety
     ///
     /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
-    /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
-    pub fn new() -> Option<Self> {
-        let inner = unsafe { coraza_new_waf() };
+    pub fn new(config: &WafConfig) -> Result<Self> {
+        let mut raw_err: coraza_error_t = std::ptr::null_mut();
+        let inner = unsafe { coraza_new_waf(config.inner, &mut raw_err as *mut _) };
         if inner == 0 {
-            return None;
+            let err = unsafe { std::ffi::CStr::from_ptr(raw_err) }
+                .to_string_lossy()
+                .to_string();
+            unsafe {
+                coraza_free_error(raw_err);
+            };
+            return Err(Error::FailedToCreateWaf(err));
         }
-        Some(Self { inner })
+        Ok(Self { inner })
     }
 
     /// Create a new transaction.
@@ -90,76 +147,6 @@ impl Waf {
             return None;
         }
         Some(Transaction { inner })
-    }
-
-    /// Add a rule.
-    ///
-    /// # Arguments
-    ///
-    /// * `rule` - The rule to add.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - If the rule was added successfully.
-    /// * `Err(Error::InvalidRule)` - If the rule was not added successfully.
-    ///
-    /// # Thread Safety
-    ///
-    /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
-    /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
-    pub fn add_rule<CStrArg: CStrArgument>(&mut self, rule: CStrArg) -> Result<()> {
-        let mut err = std::ptr::null_mut();
-
-        let added = unsafe {
-            coraza_rules_add(
-                self.inner,
-                rule.into_cstr().as_ref().as_ptr() as *mut _,
-                &mut err,
-            )
-        };
-
-        if added == 0 {
-            let err_msg = unsafe { std::ffi::CStr::from_ptr(err).to_string_lossy().to_string() };
-            unsafe {
-                coraza_free_error(err);
-            }
-            return Err(Error::InvalidRule(err_msg));
-        }
-        Ok(())
-    }
-
-    /// Add a rule from a file.
-    ///
-    /// # Arguments
-    ///
-    /// * `file` - The file to add the rule from.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - If the rule was added successfully.
-    /// * `Err(Error::InvalidRule)` - If the rule was not added successfully.
-    ///
-    /// # Thread Safety
-    ///
-    /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
-    /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
-    pub fn add_rule_from_file<CStrArg: CStrArgument>(&mut self, file: CStrArg) -> Result<()> {
-        let mut err = std::ptr::null_mut();
-        let added = unsafe {
-            coraza_rules_add_file(
-                self.inner,
-                file.into_cstr().as_ref().as_ptr() as *mut _,
-                &mut err,
-            )
-        };
-        if added == 0 {
-            let err_msg = unsafe { std::ffi::CStr::from_ptr(err).to_string_lossy().to_string() };
-            unsafe {
-                libc::free(err as *mut std::ffi::c_void);
-            }
-            return Err(Error::InvalidRule(err_msg));
-        }
-        Ok(())
     }
 }
 
@@ -558,11 +545,11 @@ mod tests {
     #[test]
     /// This test is a port of the simple_get.c example from the libcoraza repository.
     fn simple_get() {
-        let mut waf = Waf::new().expect("Failed to create WAF");
-        waf.add_rule(
+        let mut config = WafConfig::new();
+        config.add_rules(
             "SecRule REMOTE_ADDR \"127.0.0.1\" \"id:1,phase:1,deny,log,msg:'test 123',status:403\"",
-        )
-        .unwrap();
+        );
+        let waf = Waf::new(&config).expect("Failed to create WAF");
         let mut tx = waf.new_transaction().unwrap();
         tx.process_connection("127.0.0.1", 55555, "127.0.0.1", 80)
             .unwrap();
@@ -583,10 +570,16 @@ mod tests {
 
     #[test]
     fn invalid_rule() {
-        let mut waf = Waf::new().expect("Failed to create WAF");
-        let err = waf
-            .add_rule("foobar")
-            .expect_err("Should fail to add invalid rule");
-        println!("{}", err);
+        let mut config = WafConfig::new();
+        config.add_rules("foobar");
+        let result = Waf::new(&config);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            Error::FailedToCreateWaf(e) => {
+                println!("{}", e);
+            }
+            _ => panic!("Expected Error::FailedToCreateWaf"),
+        }
     }
 }

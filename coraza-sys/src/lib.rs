@@ -12,10 +12,11 @@ mod tests {
     /// This test is a port of the simple_get.c example from the libcoraza repository.
     fn simple_get() {
         unsafe {
-            let waf = coraza_new_waf();
+            let config = coraza_new_waf_config();
+            coraza_add_rules_to_waf_config(config, c"SecRule REMOTE_ADDR \"127.0.0.1\" \"id:1,phase:1,deny,log,msg:'test 123',status:403\"".as_ptr() as *mut _);
+            let mut err: *mut i8 = std::ptr::null_mut();
+            let waf = coraza_new_waf(config, &mut err as *mut _);
             assert_ne!(waf, 0);
-            let mut err = std::ptr::null_mut();
-            coraza_rules_add(waf, c"SecRule REMOTE_ADDR \"127.0.0.1\" \"id:1,phase:1,deny,log,msg:'test 123',status:403\"".as_ptr() as *mut _, &mut err);
             assert!(err.is_null());
             let tx = coraza_new_transaction(waf);
             coraza_process_connection(

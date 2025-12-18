@@ -2,9 +2,10 @@ use std::{
     borrow::Borrow, collections::HashMap, net::SocketAddr, ops::Deref, path::PathBuf, sync::Arc,
 };
 
-use coraza_rs::{Transaction, Waf};
+use coraza_rs::{Transaction, Waf, WafConfig};
 use envoy_proxy_dynamic_modules_rust_sdk::*;
 use serde::{Deserialize, Serialize};
+use tap::Tap;
 
 use crate::{filter::CorazaFilter, metrics::CorazaFilterMetrics};
 
@@ -112,21 +113,22 @@ impl CorazaFilterConfig {
             .iter()
             .flat_map(|dirs| dirs.iter())
             .map(|(name, directives)| {
-                let mut waf = Waf::new()?;
+                let mut config = WafConfig::new();
                 for directive in directives.rules.iter() {
                     match directive {
-                        Rule::File(path) => waf
-                            .add_rule_from_file(path.to_str()?)
-                            .inspect_err(|err| {
-                                envoy_log_error!("Failed to add rules from file: {}", err)
-                            })
-                            .ok()?,
-                        Rule::Inline(directive) => waf
-                            .add_rule(directive)
-                            .inspect_err(|err| envoy_log_error!("Failed to add rule: {}", err))
-                            .ok()?,
+                        Rule::File(path) => {
+                            config.add_rules_from_file(path.to_str().tap(|opt| {
+                                if opt.is_none() {
+                                    envoy_log_error!("Failed to convert path to string")
+                                }
+                            })?)
+                        }
+                        Rule::Inline(directive) => config.add_rules(directive),
                     }
                 }
+                let waf = Waf::new(&config)
+                    .inspect_err(|err| envoy_log_error!("Failed to create WAF: {}", err))
+                    .ok()?;
                 Some((name.to_string(), waf))
             })
             .collect();

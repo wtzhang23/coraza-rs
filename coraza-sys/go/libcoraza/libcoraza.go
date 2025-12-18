@@ -73,8 +73,9 @@ func coraza_add_rules_from_file_to_waf_config(c C.coraza_waf_config_t, file *C.c
 }
 
 //export coraza_free_waf_config
-func coraza_free_waf_config(c C.coraza_waf_config_t) {
+func coraza_free_waf_config(c C.coraza_waf_config_t) C.int {
 	configMapDelete(c)
+	return 0
 }
 
 /**
@@ -82,20 +83,7 @@ func coraza_free_waf_config(c C.coraza_waf_config_t) {
  * @returns pointer to WAF instance
  */
 //export coraza_new_waf
-func coraza_new_waf() C.coraza_waf_t {
-	config := coraza.NewWAFConfig()
-	waf, err := coraza.NewWAF(config)
-	if err != nil {
-		return 0
-	}
-	handle := &WafHandle{
-		waf: waf,
-	}
-	return wafMapInsert(handle)
-}
-
-//export coraza_new_waf_with_config
-func coraza_new_waf_with_config(c C.coraza_waf_config_t, er *C.coraza_error_t) C.coraza_waf_t {
+func coraza_new_waf(c C.coraza_waf_config_t, er *C.coraza_error_t) C.coraza_waf_t {
 	wafConfigHandle := ptrToWafConfigHandle(c)
 	waf, err := coraza.NewWAF(wafConfigHandle.config)
 	if err != nil {
@@ -157,14 +145,6 @@ func coraza_process_request_body(t C.coraza_transaction_t) C.int {
 	if _, err := tx.ProcessRequestBody(); err != nil {
 		return 1
 	}
-	return 0
-}
-
-//export coraza_update_status_code
-func coraza_update_status_code(t C.coraza_transaction_t, code C.int) C.int {
-	// tx := ptrToTransaction(t)
-	// c := strconv.Itoa(int(code))
-	// tx.Variables.ResponseStatus.Set(c)
 	return 0
 }
 
@@ -244,39 +224,6 @@ func coraza_process_response_body(t C.coraza_transaction_t) C.int {
 func coraza_process_response_headers(t C.coraza_transaction_t, status C.int, proto *C.char) C.int {
 	tx := ptrToTransaction(t)
 	tx.ProcessResponseHeaders(int(status), C.GoString(proto))
-	return 0
-}
-
-//export coraza_rules_add_file
-func coraza_rules_add_file(w C.coraza_waf_t, file *C.char, er *C.coraza_error_t) C.int {
-	handle := ptrToWafHandle(w)
-	config := coraza.NewWAFConfig().WithDirectivesFromFile(C.GoString(file))
-	waf, err := coraza.NewWAF(config)
-	if err != nil {
-		*er = C.coraza_error_t(C.CString(err.Error()))
-		// we share the pointer, so we shouldn't free it, right?
-		return 0
-	}
-	handle.waf = waf
-	return 1
-}
-
-//export coraza_rules_add
-func coraza_rules_add(w C.coraza_waf_t, directives *C.char, er *C.coraza_error_t) C.int {
-	handle := ptrToWafHandle(w)
-	config := coraza.NewWAFConfig().WithDirectives(C.GoString(directives))
-	waf, err := coraza.NewWAF(config)
-	if err != nil {
-		*er = C.coraza_error_t(C.CString(err.Error()))
-		// we share the pointer, so we shouldn't free it, right?
-		return 0
-	}
-	handle.waf = waf
-	return 1
-}
-
-//export coraza_rules_count
-func coraza_rules_count(w C.coraza_waf_t) C.int {
 	return 0
 }
 
@@ -425,6 +372,10 @@ func wafConfigHandleToPtr(config *WafConfigHandle) uintptr {
 // It should just be C.CString(s) but we need this to build tests
 func stringToC(s string) *C.char {
 	return C.CString(s)
+}
+
+func nilWafError() C.coraza_error_t {
+	return C.coraza_error_t(nil)
 }
 
 func main() {}
