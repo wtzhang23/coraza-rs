@@ -43,6 +43,7 @@ func TestE2E(t *testing.T) {
 		"-w", "/e2e",
 		"--rm",
 		envoyImage,
+		"--log-level", "debug",
 		"--concurrency", "1",
 		"--config-path", "/e2e/envoy.yaml",
 		"--base-id", strconv.Itoa(time.Now().Nanosecond()),
@@ -56,6 +57,15 @@ func TestE2E(t *testing.T) {
 		err := e2e.Run(e2e.Config{
 			NulledBody:        false,
 			ProxiedEntrypoint: "http://localhost:10000",
+			HttpbinEntrypoint: "http://localhost:1234",
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("run coraza per route tests", func(t *testing.T) {
+		err := e2e.Run(e2e.Config{
+			NulledBody:        false,
+			ProxiedEntrypoint: "http://localhost:10001",
 			HttpbinEntrypoint: "http://localhost:1234",
 		})
 		assert.NoError(t, err)

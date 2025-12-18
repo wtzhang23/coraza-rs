@@ -169,7 +169,7 @@ pub struct CorazaPerRouteConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CorazaPerRouteSettings {
-    pub directive: Option<String>,
+    pub directives: Option<String>,
 }
 
 impl CorazaPerRouteConfig {
