@@ -3,6 +3,7 @@ use std::path::PathBuf;
 fn main() {
     let crate_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let go = PathBuf::from(std::env::var("GO").unwrap_or("go".to_string()));
 
     println!("cargo:rerun-if-changed=go/libcoraza/go.mod");
     println!("cargo:rerun-if-changed=go/libcoraza/go.sum");
@@ -18,7 +19,7 @@ fn main() {
     std::fs::create_dir_all(&build_dir).unwrap();
 
     // build headers
-    let status = std::process::Command::new("go")
+    let status = std::process::Command::new(&go)
         .current_dir(&build_dir)
         .arg("tool")
         .arg("cgo")
@@ -32,7 +33,7 @@ fn main() {
     }
 
     // build coraza
-    let status = std::process::Command::new("go")
+    let status = std::process::Command::new(&go)
         .current_dir(&build_dir)
         .arg("build")
         .arg("-buildmode=c-archive")
