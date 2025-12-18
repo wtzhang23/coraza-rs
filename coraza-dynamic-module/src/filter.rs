@@ -51,9 +51,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
         end_of_stream: bool,
     ) -> abi::envoy_dynamic_module_type_on_http_filter_request_headers_status {
         if let Some(route_config) = envoy_filter.get_most_specific_route_config() {
-            self.per_route_config = route_config
-                .downcast_ref::<CorazaPerRouteConfig>()
-                .map(|config| config.clone());
+            self.per_route_config = route_config.downcast_ref::<CorazaPerRouteConfig>().cloned();
         }
         let tx = if let Some(per_route_config) = self.per_route_config.as_ref() {
             per_route_config
@@ -272,12 +270,12 @@ impl CorazaFilter {
 
         // process connection
         (|| {
-            let source_address = get_source_address(&config.settings(), envoy_filter)?;
-            let destination_address = get_destination_address(&config.settings(), envoy_filter)?;
+            let source_address = get_source_address(config.settings(), envoy_filter)?;
+            let destination_address = get_destination_address(config.settings(), envoy_filter)?;
             tx.process_connection(
-                &source_address.ip().to_string(),
+                source_address.ip().to_string(),
                 source_address.port(),
-                &destination_address.ip().to_string(),
+                destination_address.ip().to_string(),
                 destination_address.port(),
             )
             .inspect_err(|err| {
@@ -327,7 +325,7 @@ impl CorazaFilter {
                         .inspect_err(|err| envoy_log_debug!("Failed to parse path: {}", err))
                         .ok()
                 })
-                .or_else(|| (method == Method::CONNECT).then(|| authority))?;
+                .or_else(|| (method == Method::CONNECT).then_some(authority))?;
 
             let request_protocol = envoy_filter.get_attribute_string(
                 abi::envoy_dynamic_module_type_attribute_id::RequestProtocol,
@@ -394,8 +392,7 @@ impl CorazaFilter {
         for chunk in envoy_filter
             .get_received_request_body()
             .into_iter()
-            .map(|cs| cs.into_iter())
-            .flatten()
+            .flat_map(|cs| cs.into_iter())
         {
             tx.append_request_body(chunk.as_slice())
                 .inspect_err(|err| {
@@ -410,12 +407,7 @@ impl CorazaFilter {
         )
     }
 
-    fn on_request_trailers_helper<'a, 'b>(
-        &'a mut self,
-    ) -> Result<Option<Intervention>, FailureReason>
-    where
-        'b: 'a,
-    {
+    fn on_request_trailers_helper(&mut self) -> Result<Option<Intervention>, FailureReason> {
         if let Some(intervention) = self
             .transition_waf_request_state(WafRequestState::Trailers)
             .inspect_err(|err| {
@@ -438,8 +430,8 @@ impl CorazaFilter {
 /* Helper functions for handling the response.                    */
 /* ************************************************************** */
 impl CorazaFilter {
-    fn on_response_headers_helper<'a, 'b, EHF: EnvoyHttpFilter>(
-        &'a mut self,
+    fn on_response_headers_helper<EHF: EnvoyHttpFilter>(
+        &mut self,
         envoy_filter: &mut EHF,
         end_of_stream: bool,
     ) -> Result<Option<Intervention>, FailureReason> {
@@ -499,8 +491,8 @@ impl CorazaFilter {
         )
     }
 
-    fn on_response_body_helper<'a, 'b, EHF: EnvoyHttpFilter>(
-        &'a mut self,
+    fn on_response_body_helper<EHF: EnvoyHttpFilter>(
+        &mut self,
         envoy_filter: &mut EHF,
         end_of_stream: bool,
     ) -> Result<Option<Intervention>, FailureReason> {
@@ -523,8 +515,7 @@ impl CorazaFilter {
         for chunk in envoy_filter
             .get_received_response_body()
             .into_iter()
-            .map(|cs| cs.into_iter())
-            .flatten()
+            .flat_map(|cs| cs.into_iter())
         {
             tx.append_response_body(chunk.as_slice())
                 .inspect_err(|err| envoy_log_debug!("Failed to append response body: {:?}", err))
@@ -683,11 +674,9 @@ fn get_address_from_header<EHF: EnvoyHttpFilter>(
         .pipe(std::str::from_utf8)
         .inspect_err(|err| envoy_log_debug!("Failed to parse source address: {}", err))
         .ok()?;
-    Some(
-        raw.parse()
-            .inspect_err(|err| envoy_log_debug!("Failed to parse source address: {}", err))
-            .ok()?,
-    )
+    raw.parse()
+        .inspect_err(|err| envoy_log_debug!("Failed to parse source address: {}", err))
+        .ok()
 }
 
 fn get_address_from_headers<EHF: EnvoyHttpFilter>(
@@ -740,11 +729,9 @@ fn get_address_from_attribute<EHF: EnvoyHttpFilter>(
         .pipe(std::str::from_utf8)
         .inspect_err(|err| envoy_log_debug!("Failed to parse source address: {}", err))
         .ok()?;
-    Some(
-        raw.parse()
-            .inspect_err(|err| envoy_log_debug!("Failed to parse source address: {}", err))
-            .ok()?,
-    )
+    raw.parse()
+        .inspect_err(|err| envoy_log_debug!("Failed to parse source address: {}", err))
+        .ok()
 }
 
 /* ************************************************************** */

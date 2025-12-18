@@ -29,7 +29,7 @@ impl Waf {
     ///
     /// * `Some(Waf)` - If the WAF was created successfully.
     /// * `None` - If the WAF was not created successfully. This in practice
-    /// won't happen, but is included for completeness.
+    ///   won't happen, but is included for completeness.
     ///
     /// # Thread Safety
     ///
@@ -51,7 +51,7 @@ impl Waf {
     ///
     /// * `Some(Transaction)` - If the transaction was created successfully.
     /// * `None` - If the transaction was not created successfully. This in practice
-    /// won't happen, but is included for completeness.
+    ///   won't happen, but is included for completeness.
     ///
     /// # Thread Safety
     ///
@@ -78,7 +78,7 @@ impl Waf {
     ///
     /// * `Some(Transaction)` - If the transaction was created successfully.
     /// * `None` - If the transaction was not created successfully. This in practice
-    /// won't happen, but is included for completeness.
+    ///   won't happen, but is included for completeness.
     ///
     /// # Thread Safety
     ///
@@ -207,7 +207,7 @@ impl Transaction {
     ///
     /// * `Ok(())` - If the connection was processed successfully.
     /// * `Err(Error::ProcessingFailed)` - If the connection was not processed successfully. This in practice
-    /// won't happen, but is included for completeness.
+    ///   won't happen, but is included for completeness.
     pub fn process_connection<CStrArg1: CStrArgument, CStrArg2: CStrArgument>(
         &mut self,
         source_address: CStrArg1,
@@ -236,7 +236,7 @@ impl Transaction {
     ///
     /// * `Ok(())` - If the request body was processed successfully.
     /// * `Err(Error::ProcessingFailed)` - If the request body was not processed successfully. This in practice
-    /// won't happen, but is included for completeness.
+    ///   won't happen, but is included for completeness.
     pub fn process_request_body(&mut self) -> Result<()> {
         let rv = unsafe { coraza_process_request_body(self.inner) };
         if rv != 0 {
@@ -257,7 +257,7 @@ impl Transaction {
     ///
     /// * `Ok(())` - If the URI was processed successfully.
     /// * `Err(Error::ProcessingFailed)` - If the URI was not processed successfully. This in practice
-    /// won't happen, but is included for completeness.
+    ///   won't happen, but is included for completeness.
     pub fn process_uri<CStrArg1: CStrArgument, CStrArg2: CStrArgument, CStrArg3: CStrArgument>(
         &mut self,
         uri: CStrArg1,
@@ -289,7 +289,7 @@ impl Transaction {
     ///
     /// * `Ok(())` - If the request header was added successfully.
     /// * `Err(Error::ProcessingFailed)` - If the request header was not added successfully. This in practice
-    /// won't happen, but is included for completeness.
+    ///   won't happen, but is included for completeness.
     pub fn add_request_header(&mut self, name: &[u8], value: &[u8]) -> Result<()> {
         let rv = unsafe {
             coraza_add_request_header(
@@ -312,7 +312,7 @@ impl Transaction {
     ///
     /// * `Ok(())` - If the request headers were processed successfully.
     /// * `Err(Error::ProcessingFailed)` - If the request headers were not processed successfully. This in practice
-    /// won't happen, but is included for completeness.
+    ///   won't happen, but is included for completeness.
     pub fn process_request_headers(&mut self) -> Result<()> {
         let rv = unsafe { coraza_process_request_headers(self.inner) };
         if rv != 0 {
@@ -327,7 +327,7 @@ impl Transaction {
     ///
     /// * `Ok(())` - If the logging was processed successfully.
     /// * `Err(Error::ProcessingFailed)` - If the logging was not processed successfully. This in practice
-    /// won't happen, but is included for completeness.
+    ///   won't happen, but is included for completeness.
     pub fn process_logging(&mut self) -> Result<()> {
         let rv = unsafe { coraza_process_logging(self.inner) };
         if rv != 0 {
@@ -371,7 +371,7 @@ impl Transaction {
     ///
     /// * `Ok(())` - If the GET request argument was added successfully.
     /// * `Err(Error::ProcessingFailed)` - If the GET request argument was not added successfully. This in practice
-    /// won't happen, but is included for completeness.
+    ///   won't happen, but is included for completeness.
     pub fn add_get_request_argument<CStrArg1: CStrArgument, CStrArg2: CStrArgument>(
         &mut self,
         name: CStrArg1,
@@ -401,7 +401,7 @@ impl Transaction {
     ///
     /// * `Ok(())` - If the response header was added successfully.
     /// * `Err(Error::ProcessingFailed)` - If the response header was not added successfully. This in practice
-    /// won't happen, but is included for completeness.
+    ///   won't happen, but is included for completeness.
     pub fn add_response_header(&mut self, name: &[u8], value: &[u8]) -> Result<()> {
         let rv = unsafe {
             coraza_add_response_header(
@@ -491,9 +491,9 @@ impl Transaction {
     ///
     /// * `Some(Intervention)` - If the intervention was found.
     /// * `None` - If the intervention was not found. This signifies that the transaction was not interrupted and that
-    /// the request is currently not being blocked and should continue to be processed.
+    ///   the request is currently not being blocked and should continue to be processed.
     pub fn intervention(&mut self) -> Option<Intervention> {
-        let inner = unsafe { coraza_intervention(self.inner) as *mut coraza_intervention_t };
+        let inner = unsafe { coraza_intervention(self.inner) };
         if inner.is_null() {
             return None;
         }

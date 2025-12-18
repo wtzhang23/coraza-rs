@@ -62,7 +62,7 @@ impl CorazaFilterMetrics {
         self.common_values
             .iter()
             .map(|value| value.as_str())
-            .chain(other.into_iter())
+            .chain(other)
             .collect()
     }
 
