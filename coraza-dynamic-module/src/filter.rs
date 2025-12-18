@@ -134,6 +134,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
     ) -> abi::envoy_dynamic_module_type_on_http_filter_request_body_status {
         match self.on_request_body_helper(envoy_filter, end_of_stream) {
             Ok(Some(intervention)) => {
+                self.tx.take(); // Stop processing the request.
                 self.handle_intervention(envoy_filter, intervention);
                 abi::envoy_dynamic_module_type_on_http_filter_request_body_status::StopIterationNoBuffer
             }
@@ -175,6 +176,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
     ) -> abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status {
         match self.on_request_trailers_helper() {
             Ok(Some(intervention)) => {
+                self.tx.take(); // Stop processing the request.
                 self.handle_intervention(envoy_filter, intervention);
                 abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status::StopIteration
             }
@@ -203,6 +205,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
     ) -> abi::envoy_dynamic_module_type_on_http_filter_response_headers_status {
         match self.on_response_headers_helper(envoy_filter, end_of_stream) {
             Ok(Some(intervention)) => {
+                self.tx.take(); // Stop processing the request.
                 self.handle_intervention(envoy_filter, intervention);
                 abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::StopIteration
             }
@@ -245,6 +248,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
     ) -> abi::envoy_dynamic_module_type_on_http_filter_response_body_status {
         match self.on_response_body_helper(envoy_filter, end_of_stream) {
             Ok(Some(intervention)) => {
+                self.tx.take(); // Stop processing the request.
                 self.handle_intervention(envoy_filter, intervention);
                 abi::envoy_dynamic_module_type_on_http_filter_response_body_status::StopIterationNoBuffer
             }
@@ -286,6 +290,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
     ) -> abi::envoy_dynamic_module_type_on_http_filter_response_trailers_status {
         match self.on_response_trailers_helper() {
             Ok(Some(intervention)) => {
+                self.tx.take(); // Stop processing the request.
                 self.handle_intervention(envoy_filter, intervention);
                 abi::envoy_dynamic_module_type_on_http_filter_response_trailers_status::StopIteration
             }

@@ -36,12 +36,14 @@ static_resources:
                         value: |
                           {
                             "directives_map": {
-                              "default": [
-                                {
-                                  "type": "file",
-                                  "value": "/e2e/rules.conf"
-                                }
-                              ]
+                              "default": {
+                                "rules": [
+                                  {
+                                    "type": "file",
+                                    "value": "/e2e/rules.conf"
+                                  }
+                                ]
+                              }
                             },
                             "default_directives": "default",
                             "request_config": {
@@ -101,12 +103,14 @@ static_resources:
                         value: |
                           {
                             "directives_map": {
-                              "custom": [
-                                {
-                                  "type": "file",
-                                  "value": "/e2e/rules.conf"
-                                }
-                              ]
+                              "custom": {
+                                "rules": [
+                                  {
+                                    "type": "file",
+                                    "value": "/e2e/rules.conf"
+                                  }
+                                ]
+                              }
                             },
                             "request_config": {
                               "buffer_body_limit": 1024
