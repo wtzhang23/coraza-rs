@@ -1,4 +1,8 @@
-go 1.21
+// This is a hack to allow the coraza-sys build script to work by letting `go build` run correctly outside of libcoraza's directory.
+
+go 1.24
+
 use (
-    ./coraza-sys/go/libcoraza
+	./coraza-sys/go/libcoraza
+	./e2e
 )
