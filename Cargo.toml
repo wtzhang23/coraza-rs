@@ -1,10 +1,16 @@
 [workspace]
 resolver = "3"
-members = [ "coraza-rs","coraza-sys"]
+members = [ "coraza-dynamic-module", "coraza-rs","coraza-sys"]
 
 [workspace.dependencies]
 cstr-argument = "0.1.2"
+envoy-proxy-dynamic-modules-rust-sdk = { git = "https://github.com/envoyproxy/envoy", rev = "v1.36.4" }
 http = "1.4.0"
 libc = "0.2.178"
+parking_lot = "0.12.5"
+serde = "1.0.228"
+serde_json = "1.0.145"
+smallvec = "1.15.1"
 strum = "0.27.2"
+tap = "1.0.1"
 thiserror = "2.0.17"

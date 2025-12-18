@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use coraza_sys::*;
 use cstr_argument::CStrArgument;
-use strum::{Display, EnumString};
+use strum::{AsRefStr, Display, EnumString, IntoStaticStr};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -14,6 +14,8 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+pub static TX_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+pub static WAF_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 #[derive(Debug)]
 pub struct Waf {
@@ -21,8 +23,22 @@ pub struct Waf {
 }
 
 impl Waf {
+    /// Create a new WAF.
+    ///
+    /// # Returns
+    ///
+    /// * `Some(Waf)` - If the WAF was created successfully.
+    /// * `None` - If the WAF was not created successfully. This in practice
+    /// won't happen, but is included for completeness.
+    ///
+    /// # Thread Safety
+    ///
+    /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
+    /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
     pub fn new() -> Option<Self> {
+        let guard = WAF_LOCK.lock();
         let inner = unsafe { coraza_new_waf() };
+        drop(guard);
         if inner == 0 {
             return None;
         }
@@ -36,9 +52,16 @@ impl Waf {
     /// * `Some(Transaction)` - If the transaction was created successfully.
     /// * `None` - If the transaction was not created successfully. This in practice
     /// won't happen, but is included for completeness.
-    pub fn new_transaction(&mut self) -> Option<Transaction> {
+    ///
+    /// # Thread Safety
+    ///
+    /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
+    /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
+    pub fn new_transaction(&self) -> Option<Transaction> {
         // TODO: allow passing a log callback. Currently, libcoraza does not support this.
+        let guard = TX_LOCK.lock();
         let inner = unsafe { coraza_new_transaction(self.inner, log_cb as *mut std::ffi::c_void) };
+        drop(guard);
         if inner == 0 {
             return None;
         }
@@ -56,10 +79,16 @@ impl Waf {
     /// * `Some(Transaction)` - If the transaction was created successfully.
     /// * `None` - If the transaction was not created successfully. This in practice
     /// won't happen, but is included for completeness.
+    ///
+    /// # Thread Safety
+    ///
+    /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
+    /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
     pub fn new_transaction_with_id<CStrArg: CStrArgument>(
-        &mut self,
+        &self,
         id: CStrArg,
     ) -> Option<Transaction> {
+        let guard = TX_LOCK.lock();
         let inner = unsafe {
             coraza_new_transaction_with_id(
                 self.inner,
@@ -67,6 +96,8 @@ impl Waf {
                 log_cb as *mut std::ffi::c_void,
             )
         };
+        drop(guard);
+
         if inner == 0 {
             return None;
         }
@@ -83,8 +114,15 @@ impl Waf {
     ///
     /// * `Ok(())` - If the rule was added successfully.
     /// * `Err(Error::InvalidRule)` - If the rule was not added successfully.
+    ///
+    /// # Thread Safety
+    ///
+    /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
+    /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
     pub fn add_rule<CStrArg: CStrArgument>(&mut self, rule: CStrArg) -> Result<()> {
         let mut err = std::ptr::null_mut();
+
+        let guard = WAF_LOCK.lock();
         let added = unsafe {
             coraza_rules_add(
                 self.inner,
@@ -92,6 +130,8 @@ impl Waf {
                 &mut err,
             )
         };
+        drop(guard);
+
         if added == 0 {
             let err_msg = unsafe { std::ffi::CStr::from_ptr(err).to_string_lossy().to_string() };
             unsafe {
@@ -112,8 +152,14 @@ impl Waf {
     ///
     /// * `Ok(())` - If the rule was added successfully.
     /// * `Err(Error::InvalidRule)` - If the rule was not added successfully.
+    ///
+    /// # Thread Safety
+    ///
+    /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
+    /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
     pub fn add_rule_from_file<CStrArg: CStrArgument>(&mut self, file: CStrArg) -> Result<()> {
         let mut err = std::ptr::null_mut();
+        let guard = WAF_LOCK.lock();
         let added = unsafe {
             coraza_rules_add_file(
                 self.inner,
@@ -121,6 +167,7 @@ impl Waf {
                 &mut err,
             )
         };
+        drop(guard);
         if added == 0 {
             let err_msg = unsafe { std::ffi::CStr::from_ptr(err).to_string_lossy().to_string() };
             unsafe {
@@ -134,7 +181,9 @@ impl Waf {
 
 impl Drop for Waf {
     fn drop(&mut self) {
+        let guard = WAF_LOCK.lock();
         let rv = unsafe { coraza_free_waf(self.inner) };
+        drop(guard);
         debug_assert!(rv == 0, "Failed to free WAF");
     }
 }
@@ -209,11 +258,7 @@ impl Transaction {
     /// * `Ok(())` - If the URI was processed successfully.
     /// * `Err(Error::ProcessingFailed)` - If the URI was not processed successfully. This in practice
     /// won't happen, but is included for completeness.
-    pub fn process_uri<
-        CStrArg1: CStrArgument,
-        CStrArg2: CStrArgument,
-        CStrArg3: CStrArgument,
-    >(
+    pub fn process_uri<CStrArg1: CStrArgument, CStrArg2: CStrArgument, CStrArg3: CStrArgument>(
         &mut self,
         uri: CStrArg1,
         method: CStrArg2,
@@ -445,7 +490,8 @@ impl Transaction {
     /// # Returns
     ///
     /// * `Some(Intervention)` - If the intervention was found.
-    /// * `None` - If the intervention was not found.
+    /// * `None` - If the intervention was not found. This signifies that the transaction was not interrupted and that
+    /// the request is currently not being blocked and should continue to be processed.
     pub fn intervention(&mut self) -> Option<Intervention> {
         let inner = unsafe { coraza_intervention(self.inner) as *mut coraza_intervention_t };
         if inner.is_null() {
@@ -459,12 +505,27 @@ impl Transaction {
 
 impl Drop for Transaction {
     fn drop(&mut self) {
+        let guard = TX_LOCK.lock();
         let rv = unsafe { coraza_free_transaction(self.inner) };
+        drop(guard);
         debug_assert!(rv == 0, "Failed to free transaction");
     }
 }
 
-#[derive(Debug, Display, EnumString, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Display,
+    EnumString,
+    IntoStaticStr,
+    AsRefStr,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+)]
 pub enum InterventionAction {
     #[strum(serialize = "drop")]
     Drop,
@@ -519,24 +580,34 @@ mod tests {
     #[test]
     fn simple_get() {
         let mut waf = Waf::new().expect("Failed to create WAF");
-        waf.add_rule("SecRule REMOTE_ADDR \"127.0.0.1\" \"id:1,phase:1,deny,log,msg:'test 123',status:403\"").unwrap();
+        waf.add_rule(
+            "SecRule REMOTE_ADDR \"127.0.0.1\" \"id:1,phase:1,deny,log,msg:'test 123',status:403\"",
+        )
+        .unwrap();
         let mut tx = waf.new_transaction().unwrap();
-        tx.process_connection("127.0.0.1", 55555, "127.0.0.1", 80).unwrap();
+        tx.process_connection("127.0.0.1", 55555, "127.0.0.1", 80)
+            .unwrap();
         tx.process_uri("/someurl", "GET", "HTTP/1.1").unwrap();
         tx.process_request_headers().unwrap();
         tx.process_request_body().unwrap();
-        tx.process_response_headers(http::StatusCode::OK, "HTTP/1.1").unwrap();
+        tx.process_response_headers(http::StatusCode::OK, "HTTP/1.1")
+            .unwrap();
         tx.process_response_body().unwrap();
         tx.process_logging().unwrap();
         let intervention = tx.intervention().unwrap();
         assert_eq!(intervention.status(), Some(http::StatusCode::FORBIDDEN));
-        assert_eq!(intervention.action().unwrap().unwrap(), InterventionAction::Deny);
+        assert_eq!(
+            intervention.action().unwrap().unwrap(),
+            InterventionAction::Deny
+        );
     }
 
     #[test]
     fn invalid_rule() {
         let mut waf = Waf::new().expect("Failed to create WAF");
-        let err = waf.add_rule("foobar").expect_err("Should fail to add invalid rule");
+        let err = waf
+            .add_rule("foobar")
+            .expect_err("Should fail to add invalid rule");
         println!("{}", err);
     }
 }

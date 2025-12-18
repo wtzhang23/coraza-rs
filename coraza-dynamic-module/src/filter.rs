@@ -1,0 +1,850 @@
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+};
+
+use coraza_rs::{Intervention, InterventionAction, Transaction};
+use envoy_proxy_dynamic_modules_rust_sdk::*;
+use http::Method;
+use strum::{AsRefStr, Display, EnumString, IntoStaticStr};
+use tap::{Pipe, Tap};
+
+use crate::config::{
+    CorazaFilterConfig, CorazaFilterConfigInner, CorazaPerRouteConfig, CorazaSettings,
+    OriginalAddress,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Display, EnumString, AsRefStr, IntoStaticStr)]
+pub enum FailureReason {
+    TransitionFailed,
+    TransactionNotCreated,
+    ProcessingFailed,
+}
+
+pub struct CorazaFilter {
+    config: Arc<CorazaFilterConfigInner>,
+    per_route_config: Option<CorazaPerRouteConfig>,
+    tx: Option<Transaction>,
+    request_state: WafRequestState,
+    response_state: WafResponseState,
+    proto: Option<String>,
+}
+
+impl CorazaFilter {
+    pub fn new(config: &mut CorazaFilterConfig) -> Option<Self> {
+        let inner = config.clone_inner();
+        Some(Self {
+            config: inner,
+            per_route_config: None,
+            tx: None,
+            request_state: WafRequestState::Headers,
+            response_state: WafResponseState::Headers,
+            proto: None,
+        })
+    }
+}
+
+impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
+    fn on_request_headers(
+        &mut self,
+        envoy_filter: &mut EHF,
+        end_of_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_request_headers_status {
+        if let Some(route_config) = envoy_filter.get_most_specific_route_config() {
+            self.per_route_config = route_config
+                .downcast_ref::<CorazaPerRouteConfig>()
+                .map(|config| config.clone());
+        }
+        let tx = if let Some(per_route_config) = self.per_route_config.as_ref() {
+            per_route_config
+                .settings()
+                .directive
+                .as_deref()
+                .and_then(|d| self.config.create_transaction(d))
+        } else {
+            self.config
+                .settings()
+                .default_directives
+                .as_deref()
+                .and_then(|d| self.config.create_transaction(d))
+        };
+        self.tx = tx;
+
+        match self.on_request_headers_helper(envoy_filter, end_of_stream) {
+            Ok(Some(intervention)) => {
+                self.tx.take(); // Stop processing the request.
+                self.handle_intervention(envoy_filter, intervention);
+                abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration
+            }
+            Ok(None) => {
+                abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+            }
+            Err(reason) => {
+                self.tx.take(); // Stop processing the request.
+                if self.config.settings().fail_closed {
+                    self.drop(envoy_filter, http::StatusCode::FORBIDDEN, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration
+                } else {
+                    self.config
+                        .metrics()
+                        .increment_skipped_count(envoy_filter, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+                }
+            }
+        }
+    }
+
+    fn on_request_body(
+        &mut self,
+        envoy_filter: &mut EHF,
+        end_of_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_request_body_status {
+        match self.on_request_body_helper(envoy_filter, end_of_stream) {
+            Err(reason) => {
+                self.tx.take(); // Stop processing the request.
+                if self.config.settings().fail_closed {
+                    self.drop(envoy_filter, http::StatusCode::FORBIDDEN, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_request_body_status::StopIterationNoBuffer
+                } else {
+                    self.config
+                        .metrics()
+                        .increment_skipped_count(envoy_filter, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_request_body_status::Continue
+                }
+            }
+            Ok(Some(intervention)) => {
+                self.handle_intervention(envoy_filter, intervention);
+                abi::envoy_dynamic_module_type_on_http_filter_request_body_status::StopIterationNoBuffer
+            }
+            Ok(None) => abi::envoy_dynamic_module_type_on_http_filter_request_body_status::Continue,
+        }
+    }
+
+    fn on_request_trailers(
+        &mut self,
+        envoy_filter: &mut EHF,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status {
+        match self.on_request_trailers_helper() {
+            Ok(Some(intervention)) => {
+                self.handle_intervention(envoy_filter, intervention);
+                abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status::StopIteration
+            }
+            Ok(None) => {
+                abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status::Continue
+            }
+            Err(reason) => {
+                self.tx.take(); // Stop processing the request.
+                if self.config.settings().fail_closed {
+                    self.drop(envoy_filter, http::StatusCode::FORBIDDEN, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status::StopIteration
+                } else {
+                    self.config
+                        .metrics()
+                        .increment_skipped_count(envoy_filter, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status::Continue
+                }
+            }
+        }
+    }
+
+    fn on_response_headers(
+        &mut self,
+        envoy_filter: &mut EHF,
+        end_of_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_response_headers_status {
+        match self.on_response_headers_helper(envoy_filter, end_of_stream) {
+            Ok(Some(intervention)) => {
+                self.handle_intervention(envoy_filter, intervention);
+                abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::StopIteration
+            }
+            Ok(None) => {
+                abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::Continue
+            }
+            Err(reason) => {
+                self.tx.take(); // Stop processing the request.
+                if self.config.settings().fail_closed {
+                    self.drop(envoy_filter, http::StatusCode::FORBIDDEN, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::StopIteration
+                } else {
+                    self.config
+                        .metrics()
+                        .increment_skipped_count(envoy_filter, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::Continue
+                }
+            }
+        }
+    }
+
+    fn on_response_body(
+        &mut self,
+        envoy_filter: &mut EHF,
+        end_of_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_response_body_status {
+        match self.on_response_body_helper(envoy_filter, end_of_stream) {
+            Ok(Some(intervention)) => {
+                self.handle_intervention(envoy_filter, intervention);
+                abi::envoy_dynamic_module_type_on_http_filter_response_body_status::StopIterationNoBuffer
+            }
+            Ok(None) => {
+                abi::envoy_dynamic_module_type_on_http_filter_response_body_status::Continue
+            }
+            Err(reason) => {
+                self.tx.take(); // Stop processing the request.
+                if self.config.settings().fail_closed {
+                    self.drop(envoy_filter, http::StatusCode::FORBIDDEN, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_response_body_status::StopIterationNoBuffer
+                } else {
+                    self.config
+                        .metrics()
+                        .increment_skipped_count(envoy_filter, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_response_body_status::Continue
+                }
+            }
+        }
+    }
+
+    fn on_response_trailers(
+        &mut self,
+        envoy_filter: &mut EHF,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_response_trailers_status {
+        match self.on_response_trailers_helper() {
+            Ok(Some(intervention)) => {
+                self.handle_intervention(envoy_filter, intervention);
+                abi::envoy_dynamic_module_type_on_http_filter_response_trailers_status::StopIteration
+            }
+            Ok(None) => {
+                abi::envoy_dynamic_module_type_on_http_filter_response_trailers_status::Continue
+            }
+            Err(reason) => {
+                self.tx.take(); // Stop processing the request.
+                if self.config.settings().fail_closed {
+                    self.drop(envoy_filter, http::StatusCode::FORBIDDEN, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_response_trailers_status::StopIteration
+                } else {
+                    self.config
+                        .metrics()
+                        .increment_skipped_count(envoy_filter, reason.as_ref());
+                    abi::envoy_dynamic_module_type_on_http_filter_response_trailers_status::Continue
+                }
+            }
+        }
+    }
+
+    fn on_stream_complete(&mut self, envoy_filter: &mut EHF) {
+        // we will not transition to the finished state since the stream already completed.
+
+        // technically, this includes requests that didn't fully complete; but from the perspective of the
+        // WAF, the request was not rejected, so we can count it as allowed.
+        if self.tx.is_some() {
+            self.config.metrics().increment_allowed_count(envoy_filter);
+        }
+    }
+}
+
+// ************************************************************** */
+/* Helper functions for processing the request.                       */
+/* ************************************************************** */
+impl CorazaFilter {
+    fn on_request_headers_helper<'a, 'b, EHF: EnvoyHttpFilter>(
+        &'a mut self,
+        envoy_filter: &mut EHF,
+        end_of_stream: bool,
+    ) -> Result<Option<Intervention>, FailureReason>
+    where
+        'b: 'a,
+    {
+        if let Some(intervention) = self
+            .transition_waf_request_state(WafRequestState::Headers)
+            .inspect_err(|err| {
+                envoy_log_debug!("Failed to transition WAF request state: {}", err);
+            })
+            .map_err(|_| FailureReason::TransitionFailed)?
+        {
+            return Ok(Some(intervention));
+        }
+
+        let Self {
+            config, tx, proto, ..
+        } = self;
+        let Some(tx) = tx.as_mut() else {
+            return Ok(None);
+        };
+
+        // process connection
+        (|| {
+            let source_address = get_source_address(&config.settings(), envoy_filter)?;
+            let destination_address = get_destination_address(&config.settings(), envoy_filter)?;
+            tx.process_connection(
+                &source_address.ip().to_string(),
+                source_address.port(),
+                &destination_address.ip().to_string(),
+                destination_address.port(),
+            )
+            .inspect_err(|err| {
+                envoy_log_debug!("Failed to process connection: {:?}", err);
+            })
+            .ok()
+        })()
+        .ok_or(FailureReason::ProcessingFailed)?;
+
+        // process uri
+        (|| {
+            let method = envoy_filter
+                .get_request_header_value(":method")
+                .or_else(|| {
+                    envoy_filter.get_attribute_string(
+                        abi::envoy_dynamic_module_type_attribute_id::RequestMethod,
+                    )
+                })?;
+            let method = method
+                .as_slice()
+                .pipe(Method::from_bytes)
+                .inspect_err(|err| envoy_log_debug!("Failed to parse method: {}", err))
+                .ok()?;
+
+            let authority = envoy_filter
+                .get_request_header_value(":authority")
+                .or_else(|| {
+                    envoy_filter.get_attribute_string(
+                        abi::envoy_dynamic_module_type_attribute_id::RequestHost,
+                    )
+                })?;
+            let authority = authority
+                .as_slice()
+                .pipe(std::str::from_utf8)
+                .inspect_err(|err| envoy_log_debug!("Failed to parse authority: {}", err))
+                .ok()?;
+
+            let path_opt = envoy_filter.get_request_header_value(":path").or_else(|| {
+                envoy_filter
+                    .get_attribute_string(abi::envoy_dynamic_module_type_attribute_id::RequestPath)
+            });
+            let path = path_opt
+                .as_ref()
+                .and_then(|v| {
+                    v.as_slice()
+                        .pipe(std::str::from_utf8)
+                        .inspect_err(|err| envoy_log_debug!("Failed to parse path: {}", err))
+                        .ok()
+                })
+                .or_else(|| (method == Method::CONNECT).then(|| authority))?;
+
+            let request_protocol = envoy_filter.get_attribute_string(
+                abi::envoy_dynamic_module_type_attribute_id::RequestProtocol,
+            )?;
+            let request_protocol = request_protocol
+                .as_slice()
+                .pipe(std::str::from_utf8)
+                .inspect_err(|err| envoy_log_debug!("Failed to parse protocol: {}", err))
+                .ok()?;
+
+            *proto = Some(request_protocol.to_string());
+
+            tx.process_uri(path, method.as_str(), request_protocol)
+                .inspect_err(|err| {
+                    envoy_log_debug!("Failed to process URI: {:?}", err);
+                })
+                .ok()
+        })()
+        .ok_or(FailureReason::ProcessingFailed)?;
+
+        // process headers
+        (|| {
+            for (k, v) in envoy_filter.get_request_headers() {
+                tx.add_request_header(k.as_slice(), v.as_slice())
+                    .inspect_err(|err| envoy_log_debug!("Failed to add request header: {:?}", err))
+                    .ok()?;
+            }
+            tx.process_request_headers()
+                .inspect_err(|err| envoy_log_debug!("Failed to process request headers: {:?}", err))
+                .ok()
+        })()
+        .ok_or(FailureReason::ProcessingFailed)?;
+
+        self.get_intervention(
+            |this| this.transition_waf_request_state(WafRequestState::Finished),
+            end_of_stream,
+        )
+    }
+
+    fn on_request_body_helper<'a, 'b, EHF: EnvoyHttpFilter>(
+        &'a mut self,
+        envoy_filter: &mut EHF,
+        end_of_stream: bool,
+    ) -> Result<Option<Intervention>, FailureReason>
+    where
+        'b: 'a,
+    {
+        if let Some(intervention) = self
+            .transition_waf_request_state(WafRequestState::RequestBody)
+            .inspect_err(|err| {
+                envoy_log_debug!("Failed to transition WAF request state: {}", err);
+            })
+            .map_err(|_| FailureReason::TransitionFailed)?
+        {
+            return Ok(Some(intervention));
+        }
+
+        let Self { tx, .. } = self;
+        let Some(tx) = tx.as_mut() else {
+            return Ok(None);
+        };
+
+        // feed all the request body chunks to the WAF
+        for chunk in envoy_filter
+            .get_received_request_body()
+            .into_iter()
+            .map(|cs| cs.into_iter())
+            .flatten()
+        {
+            tx.append_request_body(chunk.as_slice())
+                .inspect_err(|err| {
+                    envoy_log_debug!("Failed to append request body: {:?}", err);
+                })
+                .map_err(|_| FailureReason::ProcessingFailed)?;
+        }
+
+        self.get_intervention(
+            |this| this.transition_waf_request_state(WafRequestState::Finished),
+            end_of_stream,
+        )
+    }
+
+    fn on_request_trailers_helper<'a, 'b>(
+        &'a mut self,
+    ) -> Result<Option<Intervention>, FailureReason>
+    where
+        'b: 'a,
+    {
+        if let Some(intervention) = self
+            .transition_waf_request_state(WafRequestState::Trailers)
+            .inspect_err(|err| {
+                envoy_log_debug!("Failed to transition WAF request state: {}", err);
+            })
+            .map_err(|_| FailureReason::TransitionFailed)?
+        {
+            return Ok(Some(intervention));
+        }
+
+        // after request trailers are received, we can guarantee that the request side is complete.
+        self.get_intervention(
+            |this| this.transition_waf_request_state(WafRequestState::Finished),
+            true,
+        )
+    }
+}
+
+// ************************************************************** */
+/* Helper functions for handling the response.                    */
+/* ************************************************************** */
+impl CorazaFilter {
+    fn on_response_headers_helper<'a, 'b, EHF: EnvoyHttpFilter>(
+        &'a mut self,
+        envoy_filter: &mut EHF,
+        end_of_stream: bool,
+    ) -> Result<Option<Intervention>, FailureReason> {
+        if let Some(intervention) = self
+            .transition_waf_response_state(WafResponseState::Headers)
+            .inspect_err(|err| {
+                envoy_log_debug!("Failed to transition WAF response state: {}", err);
+            })
+            .map_err(|_| FailureReason::TransitionFailed)?
+        {
+            return Ok(Some(intervention));
+        }
+
+        let Self { tx, proto, .. } = self;
+        let Some(tx) = tx.as_mut() else {
+            return Ok(None);
+        };
+
+        // process headers
+        (|| {
+            for (k, v) in envoy_filter.get_response_headers() {
+                tx.add_response_header(k.as_slice(), v.as_slice())
+                    .inspect_err(|err| envoy_log_debug!("Failed to add response header: {:?}", err))
+                    .ok()?;
+            }
+
+            let status = envoy_filter
+                .get_response_header_value(":status")
+                .or_else(|| {
+                    envoy_filter.get_attribute_string(
+                        abi::envoy_dynamic_module_type_attribute_id::ResponseCode,
+                    )
+                })?;
+            let status = status
+                .as_slice()
+                .pipe(std::str::from_utf8)
+                .inspect_err(|err| envoy_log_debug!("Failed to parse status: {}", err))
+                .ok()?;
+            let status = status
+                .parse::<http::StatusCode>()
+                .inspect_err(|err| envoy_log_debug!("Failed to parse status: {}", err))
+                .ok()?;
+
+            let response_protocol = proto.as_deref().unwrap_or("HTTP/1.1");
+
+            tx.process_response_headers(status, response_protocol)
+                .inspect_err(|err| {
+                    envoy_log_debug!("Failed to process response headers: {:?}", err)
+                })
+                .ok()
+        })()
+        .ok_or(FailureReason::ProcessingFailed)?;
+
+        self.get_intervention(
+            |this| this.transition_waf_response_state(WafResponseState::Finished),
+            end_of_stream,
+        )
+    }
+
+    fn on_response_body_helper<'a, 'b, EHF: EnvoyHttpFilter>(
+        &'a mut self,
+        envoy_filter: &mut EHF,
+        end_of_stream: bool,
+    ) -> Result<Option<Intervention>, FailureReason> {
+        if let Some(intervention) = self
+            .transition_waf_response_state(WafResponseState::ResponseBody)
+            .inspect_err(|err| {
+                envoy_log_debug!("Failed to transition WAF response state: {}", err);
+            })
+            .map_err(|_| FailureReason::TransitionFailed)?
+        {
+            return Ok(Some(intervention));
+        }
+
+        let Self { tx, .. } = self;
+        let Some(tx) = tx.as_mut() else {
+            return Ok(None);
+        };
+
+        // feed all the response body chunks to the WAF
+        for chunk in envoy_filter
+            .get_received_response_body()
+            .into_iter()
+            .map(|cs| cs.into_iter())
+            .flatten()
+        {
+            tx.append_response_body(chunk.as_slice())
+                .inspect_err(|err| envoy_log_debug!("Failed to append response body: {:?}", err))
+                .map_err(|_| FailureReason::ProcessingFailed)?;
+        }
+
+        self.get_intervention(
+            |this| this.transition_waf_response_state(WafResponseState::Finished),
+            end_of_stream,
+        )
+    }
+
+    fn on_response_trailers_helper(&mut self) -> Result<Option<Intervention>, FailureReason> {
+        if let Some(intervention) = self
+            .transition_waf_response_state(WafResponseState::Trailers)
+            .inspect_err(|err| {
+                envoy_log_debug!("Failed to transition WAF response state: {}", err);
+            })
+            .map_err(|_| FailureReason::TransitionFailed)?
+        {
+            return Ok(Some(intervention));
+        }
+
+        self.get_intervention(
+            |this| this.transition_waf_response_state(WafResponseState::Finished),
+            true,
+        )
+    }
+}
+
+// ************************************************************** */
+/* Helper functions for handling interventions.                   */
+/* ************************************************************** */
+impl CorazaFilter {
+    fn get_intervention<'a, 'b, F>(
+        &'a mut self,
+        transition_to_finished: F,
+        end_of_stream: bool,
+    ) -> Result<Option<Intervention>, FailureReason>
+    where
+        'b: 'a,
+        F: FnOnce(&'a mut Self) -> Result<Option<Intervention>, coraza_rs::Error>,
+    {
+        let Some(tx) = self.tx.as_mut() else {
+            return Ok(None);
+        };
+        if let Some(intervention) = tx.intervention() {
+            Ok(Some(intervention))
+        } else if end_of_stream {
+            transition_to_finished(self)
+                .inspect_err(|err| {
+                    envoy_log_debug!("Failed to transition WAF state: {}", err);
+                })
+                .map_err(|_| FailureReason::TransitionFailed)
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn handle_intervention<EHF: EnvoyHttpFilter>(
+        &mut self,
+        envoy_filter: &mut EHF,
+        intervention: Intervention,
+    ) {
+        match intervention.action() {
+            Ok(Some(act)) => {
+                self.config
+                    .metrics()
+                    .increment_denied_count(envoy_filter, act.as_ref());
+                // We will just handle everything as a drop for now.
+                match act {
+                    InterventionAction::Deny
+                    | InterventionAction::Redirect
+                    | InterventionAction::Drop => {
+                        self.drop(
+                            envoy_filter,
+                            intervention.status().unwrap_or(http::StatusCode::FORBIDDEN),
+                            act.as_ref(),
+                        );
+                    }
+                }
+            }
+            Ok(None) => {
+                envoy_log_error!("No intervention action found");
+                self.drop(envoy_filter, http::StatusCode::FORBIDDEN, "unknown_action");
+            }
+            Err(err) => {
+                envoy_log_error!("Unknown intervention action: {}", err);
+                self.drop(envoy_filter, http::StatusCode::FORBIDDEN, err);
+            }
+        }
+    }
+
+    fn drop<EHF: EnvoyHttpFilter>(
+        &mut self,
+        envoy_filter: &mut EHF,
+        status: http::StatusCode,
+        reason: &str,
+    ) {
+        self.config
+            .metrics()
+            .increment_denied_count(envoy_filter, reason);
+        envoy_filter.send_response(status.as_u16().into(), Vec::new(), None);
+    }
+}
+
+/* ************************************************************** */
+/* Get addresses from various sources.                            */
+/* ************************************************************** */
+
+fn get_source_address<EHF: EnvoyHttpFilter>(
+    settings: &CorazaSettings,
+    envoy_filter: &mut EHF,
+) -> Option<SocketAddr> {
+    Some(match &settings.connection_config.source_address {
+        Some(OriginalAddress::Header(header)) => get_address_from_header(envoy_filter, header)?,
+        Some(OriginalAddress::HeaderPair { host, port }) => {
+            get_address_from_headers(envoy_filter, host, port)?
+        }
+        Some(OriginalAddress::Literal { address }) => *address,
+        None => get_address_from_attribute(
+            envoy_filter,
+            abi::envoy_dynamic_module_type_attribute_id::SourceAddress,
+        )?,
+    })
+}
+
+fn get_destination_address<EHF: EnvoyHttpFilter>(
+    settings: &CorazaSettings,
+    envoy_filter: &mut EHF,
+) -> Option<SocketAddr> {
+    Some(match &settings.connection_config.destination_address {
+        Some(OriginalAddress::Header(header)) => get_address_from_header(envoy_filter, header)?,
+        Some(OriginalAddress::HeaderPair { host, port }) => {
+            get_address_from_headers(envoy_filter, host, port)?
+        }
+        Some(OriginalAddress::Literal { address }) => *address,
+        None => get_address_from_attribute(
+            envoy_filter,
+            abi::envoy_dynamic_module_type_attribute_id::DestinationAddress,
+        )?,
+    })
+}
+
+fn get_address_from_header<EHF: EnvoyHttpFilter>(
+    envoy_filter: &mut EHF,
+    header: &str,
+) -> Option<SocketAddr> {
+    let raw = envoy_filter.get_request_header_value(header).tap(|opt| {
+        if opt.is_none() {
+            envoy_log_debug!("Failed to get source address")
+        }
+    })?;
+    let raw = raw
+        .as_slice()
+        .pipe(std::str::from_utf8)
+        .inspect_err(|err| envoy_log_debug!("Failed to parse source address: {}", err))
+        .ok()?;
+    Some(
+        raw.parse()
+            .inspect_err(|err| envoy_log_debug!("Failed to parse source address: {}", err))
+            .ok()?,
+    )
+}
+
+fn get_address_from_headers<EHF: EnvoyHttpFilter>(
+    envoy_filter: &mut EHF,
+    host: &str,
+    port: &str,
+) -> Option<SocketAddr> {
+    let raw_host = envoy_filter.get_request_header_value(host).tap(|opt| {
+        if opt.is_none() {
+            envoy_log_debug!("Failed to get source host")
+        }
+    })?;
+    let raw_port = envoy_filter.get_request_header_value(port).tap(|opt| {
+        if opt.is_none() {
+            envoy_log_debug!("Failed to get source port")
+        }
+    })?;
+    let raw_host = raw_host
+        .as_slice()
+        .pipe(std::str::from_utf8)
+        .inspect_err(|err| envoy_log_debug!("Failed to parse source host: {}", err))
+        .ok()?;
+    let raw_port = raw_port
+        .as_slice()
+        .pipe(std::str::from_utf8)
+        .inspect_err(|err| envoy_log_debug!("Failed to parse source port: {}", err))
+        .ok()?;
+    let host = raw_host
+        .parse::<IpAddr>()
+        .inspect_err(|err| envoy_log_debug!("Failed to parse source host: {}", err))
+        .ok()?;
+    let port = raw_port
+        .parse::<u16>()
+        .inspect_err(|err| envoy_log_debug!("Failed to parse source port: {}", err))
+        .ok()?;
+    Some(SocketAddr::from((host, port)))
+}
+
+fn get_address_from_attribute<EHF: EnvoyHttpFilter>(
+    envoy_filter: &mut EHF,
+    attribute: abi::envoy_dynamic_module_type_attribute_id,
+) -> Option<SocketAddr> {
+    let raw = envoy_filter.get_attribute_string(attribute).tap(|opt| {
+        if opt.is_none() {
+            envoy_log_debug!("Failed to get source address")
+        }
+    })?;
+    let raw = raw
+        .as_slice()
+        .pipe(std::str::from_utf8)
+        .inspect_err(|err| envoy_log_debug!("Failed to parse source address: {}", err))
+        .ok()?;
+    Some(
+        raw.parse()
+            .inspect_err(|err| envoy_log_debug!("Failed to parse source address: {}", err))
+            .ok()?,
+    )
+}
+
+/* ************************************************************** */
+/* WAF request and response states.                                */
+/* ************************************************************** */
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum WafRequestState {
+    Headers,
+    RequestBody,
+    Trailers,
+    Finished,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum WafResponseState {
+    Headers,
+    ResponseBody,
+    Trailers,
+    Finished,
+}
+
+impl CorazaFilter {
+    fn transition_waf_request_state(
+        &mut self,
+        desired_state: WafRequestState,
+    ) -> Result<Option<Intervention>, coraza_rs::Error> {
+        let Self {
+            tx, request_state, ..
+        } = self;
+        let Some(tx) = tx.as_mut() else {
+            return Ok(None);
+        };
+        while *request_state != desired_state {
+            match (*request_state, desired_state) {
+                (WafRequestState::Headers, WafRequestState::RequestBody)
+                | (WafRequestState::Headers, WafRequestState::Finished) => {
+                    // process request headers already handled
+                    *request_state = WafRequestState::RequestBody;
+                }
+                (WafRequestState::RequestBody, WafRequestState::Trailers)
+                | (WafRequestState::RequestBody, WafRequestState::Finished) => {
+                    *request_state = WafRequestState::Trailers;
+                    tx.process_request_body()?;
+                }
+                (WafRequestState::Trailers, WafRequestState::Finished) => {
+                    *request_state = WafRequestState::Finished;
+                }
+                (a, b) if a == b => {
+                    // Technically, this is handled by the while loop condition.
+                    break;
+                }
+                (_, _) => {
+                    unreachable!(
+                        "Invalid transition from {:?} to {:?}",
+                        request_state, desired_state
+                    );
+                }
+            }
+        }
+        Ok(tx.intervention())
+    }
+
+    fn transition_waf_response_state(
+        &mut self,
+        desired_state: WafResponseState,
+    ) -> Result<Option<Intervention>, coraza_rs::Error> {
+        let Self {
+            tx, response_state, ..
+        } = self;
+        let Some(tx) = tx.as_mut() else {
+            return Ok(None);
+        };
+        while *response_state != desired_state {
+            match (*response_state, desired_state) {
+                (WafResponseState::Headers, WafResponseState::ResponseBody)
+                | (WafResponseState::Headers, WafResponseState::Finished) => {
+                    // process response headers already handled
+                    *response_state = WafResponseState::ResponseBody;
+                }
+                (WafResponseState::ResponseBody, WafResponseState::Trailers)
+                | (WafResponseState::ResponseBody, WafResponseState::Finished) => {
+                    *response_state = WafResponseState::Trailers;
+                    tx.process_response_body()?;
+                }
+                (WafResponseState::Trailers, WafResponseState::Finished) => {
+                    *response_state = WafResponseState::Finished;
+                }
+                (a, b) if a == b => {
+                    // Technically, this is handled by the while loop condition.
+                    break;
+                }
+                (_, _) => {
+                    unreachable!(
+                        "Invalid transition from {:?} to {:?}",
+                        response_state, desired_state
+                    );
+                }
+            }
+        }
+        Ok(tx.intervention())
+    }
+}
