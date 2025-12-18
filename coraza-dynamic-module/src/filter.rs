@@ -27,6 +27,9 @@ pub struct CorazaFilter {
     tx: Option<Transaction>,
     request_state: WafRequestState,
     response_state: WafResponseState,
+    seen_request_body_bytes: usize,
+    seen_response_body_bytes: usize,
+    entered_response_body: bool,
     proto: Option<String>,
 }
 
@@ -39,6 +42,9 @@ impl CorazaFilter {
             tx: None,
             request_state: WafRequestState::Headers,
             response_state: WafResponseState::Headers,
+            seen_request_body_bytes: 0,
+            seen_response_body_bytes: 0,
+            entered_response_body: false,
             proto: None,
         })
     }
@@ -75,7 +81,21 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
                 abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration
             }
             Ok(None) => {
-                abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+                if let Some(buffer_body_limit) = self
+                    .config
+                    .settings()
+                    .request_config
+                    .as_ref()
+                    .and_then(|c| c.buffer_body_limit)
+                {
+                    if self.seen_request_body_bytes < buffer_body_limit && !end_of_stream {
+                        abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration
+                    } else {
+                        abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+                    }
+                } else {
+                    abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+                }
             }
             Err(reason) => {
                 self.tx.take(); // Stop processing the request.
@@ -98,6 +118,27 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
         end_of_stream: bool,
     ) -> abi::envoy_dynamic_module_type_on_http_filter_request_body_status {
         match self.on_request_body_helper(envoy_filter, end_of_stream) {
+            Ok(Some(intervention)) => {
+                self.handle_intervention(envoy_filter, intervention);
+                abi::envoy_dynamic_module_type_on_http_filter_request_body_status::StopIterationNoBuffer
+            }
+            Ok(None) => {
+                if let Some(buffer_body_limit) = self
+                    .config
+                    .settings()
+                    .request_config
+                    .as_ref()
+                    .and_then(|c| c.buffer_body_limit)
+                {
+                    if self.seen_request_body_bytes < buffer_body_limit && !end_of_stream {
+                        abi::envoy_dynamic_module_type_on_http_filter_request_body_status::StopIterationAndBuffer
+                    } else {
+                        abi::envoy_dynamic_module_type_on_http_filter_request_body_status::Continue
+                    }
+                } else {
+                    abi::envoy_dynamic_module_type_on_http_filter_request_body_status::Continue
+                }
+            }
             Err(reason) => {
                 self.tx.take(); // Stop processing the request.
                 if self.config.settings().fail_closed {
@@ -110,11 +151,6 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
                     abi::envoy_dynamic_module_type_on_http_filter_request_body_status::Continue
                 }
             }
-            Ok(Some(intervention)) => {
-                self.handle_intervention(envoy_filter, intervention);
-                abi::envoy_dynamic_module_type_on_http_filter_request_body_status::StopIterationNoBuffer
-            }
-            Ok(None) => abi::envoy_dynamic_module_type_on_http_filter_request_body_status::Continue,
         }
     }
 
@@ -156,7 +192,21 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
                 abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::StopIteration
             }
             Ok(None) => {
-                abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::Continue
+                if let Some(buffer_body_limit) = self
+                    .config
+                    .settings()
+                    .response_config
+                    .as_ref()
+                    .and_then(|c| c.buffer_body_limit)
+                {
+                    if self.seen_response_body_bytes < buffer_body_limit && !end_of_stream {
+                        abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::StopIteration
+                    } else {
+                        abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::Continue
+                    }
+                } else {
+                    abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::Continue
+                }
             }
             Err(reason) => {
                 self.tx.take(); // Stop processing the request.
@@ -184,7 +234,21 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
                 abi::envoy_dynamic_module_type_on_http_filter_response_body_status::StopIterationNoBuffer
             }
             Ok(None) => {
-                abi::envoy_dynamic_module_type_on_http_filter_response_body_status::Continue
+                if let Some(buffer_body_limit) = self
+                    .config
+                    .settings()
+                    .response_config
+                    .as_ref()
+                    .and_then(|c| c.buffer_body_limit)
+                {
+                    if self.seen_response_body_bytes < buffer_body_limit && !end_of_stream {
+                        abi::envoy_dynamic_module_type_on_http_filter_response_body_status::StopIterationAndBuffer
+                    } else {
+                        abi::envoy_dynamic_module_type_on_http_filter_response_body_status::Continue
+                    }
+                } else {
+                    abi::envoy_dynamic_module_type_on_http_filter_response_body_status::Continue
+                }
             }
             Err(reason) => {
                 self.tx.take(); // Stop processing the request.
@@ -373,6 +437,7 @@ impl CorazaFilter {
     where
         'b: 'a,
     {
+        self.entered_response_body = true;
         if let Some(intervention) = self
             .transition_waf_request_state(WafRequestState::RequestBody)
             .inspect_err(|err| {
@@ -394,6 +459,7 @@ impl CorazaFilter {
             .into_iter()
             .flat_map(|cs| cs.into_iter())
         {
+            self.seen_request_body_bytes += chunk.as_slice().len();
             tx.append_request_body(chunk.as_slice())
                 .inspect_err(|err| {
                     envoy_log_debug!("Failed to append request body: {:?}", err);
@@ -517,6 +583,7 @@ impl CorazaFilter {
             .into_iter()
             .flat_map(|cs| cs.into_iter())
         {
+            self.seen_response_body_bytes += chunk.as_slice().len();
             tx.append_response_body(chunk.as_slice())
                 .inspect_err(|err| envoy_log_debug!("Failed to append response body: {:?}", err))
                 .map_err(|_| FailureReason::ProcessingFailed)?;
@@ -618,6 +685,9 @@ impl CorazaFilter {
         self.config
             .metrics()
             .increment_denied_count(envoy_filter, reason);
+        if self.entered_response_body {
+            envoy_log_debug!("Got drop action after response headers were sent downstream");
+        }
         envoy_filter.send_response(status.as_u16().into(), Vec::new(), None);
     }
 }
@@ -630,34 +700,46 @@ fn get_source_address<EHF: EnvoyHttpFilter>(
     settings: &CorazaSettings,
     envoy_filter: &mut EHF,
 ) -> Option<SocketAddr> {
-    Some(match &settings.connection_config.source_address {
-        Some(OriginalAddress::Header(header)) => get_address_from_header(envoy_filter, header)?,
-        Some(OriginalAddress::HeaderPair { host, port }) => {
-            get_address_from_headers(envoy_filter, host, port)?
-        }
-        Some(OriginalAddress::Literal { address }) => *address,
-        None => get_address_from_attribute(
-            envoy_filter,
-            abi::envoy_dynamic_module_type_attribute_id::SourceAddress,
-        )?,
-    })
+    Some(
+        match settings
+            .connection_config
+            .as_ref()
+            .and_then(|config| config.source_address.as_ref())
+        {
+            Some(OriginalAddress::Header(header)) => get_address_from_header(envoy_filter, header)?,
+            Some(OriginalAddress::HeaderPair { host, port }) => {
+                get_address_from_headers(envoy_filter, host, port)?
+            }
+            Some(OriginalAddress::Literal { address }) => *address,
+            None => get_address_from_attribute(
+                envoy_filter,
+                abi::envoy_dynamic_module_type_attribute_id::SourceAddress,
+            )?,
+        },
+    )
 }
 
 fn get_destination_address<EHF: EnvoyHttpFilter>(
     settings: &CorazaSettings,
     envoy_filter: &mut EHF,
 ) -> Option<SocketAddr> {
-    Some(match &settings.connection_config.destination_address {
-        Some(OriginalAddress::Header(header)) => get_address_from_header(envoy_filter, header)?,
-        Some(OriginalAddress::HeaderPair { host, port }) => {
-            get_address_from_headers(envoy_filter, host, port)?
-        }
-        Some(OriginalAddress::Literal { address }) => *address,
-        None => get_address_from_attribute(
-            envoy_filter,
-            abi::envoy_dynamic_module_type_attribute_id::DestinationAddress,
-        )?,
-    })
+    Some(
+        match settings
+            .connection_config
+            .as_ref()
+            .and_then(|config| config.destination_address.as_ref())
+        {
+            Some(OriginalAddress::Header(header)) => get_address_from_header(envoy_filter, header)?,
+            Some(OriginalAddress::HeaderPair { host, port }) => {
+                get_address_from_headers(envoy_filter, host, port)?
+            }
+            Some(OriginalAddress::Literal { address }) => *address,
+            None => get_address_from_attribute(
+                envoy_filter,
+                abi::envoy_dynamic_module_type_attribute_id::DestinationAddress,
+            )?,
+        },
+    )
 }
 
 fn get_address_from_header<EHF: EnvoyHttpFilter>(

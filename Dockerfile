@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y clang autoconf automake libtool m4 make
 COPY --from=planner /recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
+# Hack to allow building without copying over the e2e tests.
+RUN mkdir -p e2e && cd e2e && go mod init github.com/wtzhang23/coraza-rs/e2e && go mod tidy
 COPY Cargo.toml Cargo.lock ./
 COPY coraza-dynamic-module ./coraza-dynamic-module
 COPY coraza-rs ./coraza-rs
@@ -20,17 +22,8 @@ COPY go.work.sum ./go.work.sum
 
 RUN cargo build --release --package coraza-dynamic-module
 
-FROM debian:bookworm-slim AS runtime-base
-
-FROM runtime-base AS envoy
-RUN apt-get update && apt-get install -y wget ca-certificates gpg
-RUN wget -O- https://apt.envoyproxy.io/signing.key | gpg --dearmor -o /etc/apt/keyrings/envoy-keyring.gpg
-RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/envoy-keyring.gpg] https://apt.envoyproxy.io bookworm main" | tee /etc/apt/sources.list.d/envoy.list
-RUN apt-get update && apt-get install -y envoy
-
-FROM runtime-base AS runtime
-ENV LD_LIBRARY_PATH=/usr/local/lib
+FROM envoyproxy/envoy:v1.36.4 AS runtime-base
+ENV ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/usr/local/lib
 COPY --from=builder /target/release/libcoraza_dynamic_module.so /usr/local/lib/libcoraza_dynamic_module.so
-COPY --from=envoy /usr/bin/envoy /usr/bin/envoy
-ENTRYPOINT ["/usr/bin/envoy"]
+ENTRYPOINT ["envoy"]
 

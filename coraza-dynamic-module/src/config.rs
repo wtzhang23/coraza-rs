@@ -10,17 +10,30 @@ use crate::{filter::CorazaFilter, metrics::CorazaFilterMetrics};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CorazaSettings {
-    pub metric_labels: HashMap<String, String>,
-    pub directives_map: HashMap<String, Vec<Rule>>,
+    pub metric_labels: Option<HashMap<String, String>>,
+    pub directives_map: Option<HashMap<String, Vec<Rule>>>,
     pub default_directives: Option<String>,
-    pub connection_config: ConnectionConfig,
+    pub connection_config: Option<ConnectionConfig>,
+    pub request_config: Option<RequestConfig>,
+    pub response_config: Option<ResponseConfig>,
+    #[serde(default)]
     pub fail_closed: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ConnectionConfig {
     pub source_address: Option<OriginalAddress>,
     pub destination_address: Option<OriginalAddress>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct RequestConfig {
+    pub buffer_body_limit: Option<usize>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct ResponseConfig {
+    pub buffer_body_limit: Option<usize>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -84,11 +97,15 @@ impl CorazaFilterConfig {
         filter_config: &str,
     ) -> Option<Self> {
         let settings: CorazaSettings = serde_json::from_str(filter_config)
-            .inspect_err(|err| envoy_log_critical!("Failed to parse Coraza filter config: {}", err))
+            .inspect_err(|err| {
+                envoy_log_critical!("Failed to parse Coraza filter config: {}", err);
+                envoy_log_critical!("Filter config: {}", filter_config);
+            })
             .ok()?;
         let wafs: Option<HashMap<String, Waf>> = settings
             .directives_map
             .iter()
+            .flat_map(|dirs| dirs.iter())
             .map(|(name, directives)| {
                 let mut waf = Waf::new()?;
                 for directive in directives {
@@ -109,9 +126,12 @@ impl CorazaFilterConfig {
             })
             .collect();
         let wafs = wafs?;
-        let metrics = CorazaFilterMetrics::new(&settings.metric_labels, envoy_filter_config)
-            .inspect_err(|err| envoy_log_error!("Failed to create metrics: {:?}", err))
-            .ok()?;
+        let metrics = CorazaFilterMetrics::new(
+            settings.metric_labels.as_ref().unwrap_or(&HashMap::new()),
+            envoy_filter_config,
+        )
+        .inspect_err(|err| envoy_log_error!("Failed to create metrics: {:?}", err))
+        .ok()?;
         Some(Self {
             inner: Arc::new(CorazaFilterConfigInner::new(settings, metrics, wafs)),
         })
@@ -156,7 +176,8 @@ impl CorazaPerRouteConfig {
     pub fn new(filter_config: &str) -> Option<Self> {
         let settings: CorazaPerRouteSettings = serde_json::from_str(filter_config)
             .inspect_err(|err| {
-                envoy_log_error!("Failed to parse Coraza per route settings: {}", err)
+                envoy_log_error!("Failed to parse Coraza per route settings: {}", err);
+                envoy_log_error!("Per route config: {}", filter_config);
             })
             .ok()?;
         Some(Self {
