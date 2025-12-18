@@ -121,7 +121,7 @@ impl Waf {
         if added == 0 {
             let err_msg = unsafe { std::ffi::CStr::from_ptr(err).to_string_lossy().to_string() };
             unsafe {
-                libc::free(err as *mut std::ffi::c_void);
+                coraza_free_error(err);
             }
             return Err(Error::InvalidRule(err_msg));
         }

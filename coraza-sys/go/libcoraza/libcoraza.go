@@ -18,6 +18,7 @@ typedef struct coraza_intervention_t
 typedef uintptr_t coraza_waf_config_t;
 typedef uintptr_t coraza_waf_t;
 typedef uintptr_t coraza_transaction_t;
+typedef uintptr_t coraza_error_t;
 
 typedef void (*coraza_log_cb) (const void *);
 void send_log_to_cb(coraza_log_cb cb, const char *msg);
@@ -94,11 +95,11 @@ func coraza_new_waf() C.coraza_waf_t {
 }
 
 //export coraza_new_waf_with_config
-func coraza_new_waf_with_config(c C.coraza_waf_config_t, er **C.char) C.coraza_waf_t {
+func coraza_new_waf_with_config(c C.coraza_waf_config_t, er *C.coraza_error_t) C.coraza_waf_t {
 	wafConfigHandle := ptrToWafConfigHandle(c)
 	waf, err := coraza.NewWAF(wafConfigHandle.config)
 	if err != nil {
-		*er = C.CString(err.Error())
+		*er = C.coraza_error_t(C.CString(err.Error()))
 		// we share the pointer, so we shouldn't free it, right?
 		return 0
 	}
@@ -251,12 +252,12 @@ func coraza_process_response_headers(t C.coraza_transaction_t, status C.int, pro
 }
 
 //export coraza_rules_add_file
-func coraza_rules_add_file(w C.coraza_waf_t, file *C.char, er **C.char) C.int {
+func coraza_rules_add_file(w C.coraza_waf_t, file *C.char, er *C.coraza_error_t) C.int {
 	handle := ptrToWafHandle(w)
 	config := coraza.NewWAFConfig().WithDirectivesFromFile(C.GoString(file))
 	waf, err := coraza.NewWAF(config)
 	if err != nil {
-		*er = C.CString(err.Error())
+		*er = C.coraza_error_t(C.CString(err.Error()))
 		// we share the pointer, so we shouldn't free it, right?
 		return 0
 	}
@@ -265,12 +266,12 @@ func coraza_rules_add_file(w C.coraza_waf_t, file *C.char, er **C.char) C.int {
 }
 
 //export coraza_rules_add
-func coraza_rules_add(w C.coraza_waf_t, directives *C.char, er **C.char) C.int {
+func coraza_rules_add(w C.coraza_waf_t, directives *C.char, er *C.coraza_error_t) C.int {
 	handle := ptrToWafHandle(w)
 	config := coraza.NewWAFConfig().WithDirectives(C.GoString(directives))
 	waf, err := coraza.NewWAF(config)
 	if err != nil {
-		*er = C.CString(err.Error())
+		*er = C.coraza_error_t(C.CString(err.Error()))
 		// we share the pointer, so we shouldn't free it, right?
 		return 0
 	}
@@ -336,6 +337,12 @@ func coraza_request_body_from_file(t C.coraza_transaction_t, file *C.char) C.int
 //export coraza_free_waf
 func coraza_free_waf(t C.coraza_waf_t) C.int {
 	wafMapDelete(t)
+	return 0
+}
+
+//export coraza_free_error
+func coraza_free_error(e C.coraza_error_t) C.int {
+	C.free(unsafe.Pointer(e))
 	return 0
 }
 
