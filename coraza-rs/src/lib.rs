@@ -14,8 +14,8 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
-pub static TX_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
-pub static WAF_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+static TX_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+static WAF_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 #[derive(Debug)]
 pub struct Waf {
@@ -578,6 +578,7 @@ mod tests {
     use super::*;
 
     #[test]
+    /// This test is a port of the simple_get.c example from the libcoraza repository.
     fn simple_get() {
         let mut waf = Waf::new().expect("Failed to create WAF");
         waf.add_rule(
