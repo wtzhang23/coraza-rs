@@ -31,6 +31,7 @@ jobs:
           context: .
           tags: envoy-with-coraza-module:latest
           push: false
+          load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
