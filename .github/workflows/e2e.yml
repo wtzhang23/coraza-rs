@@ -32,8 +32,10 @@ jobs:
           tags: envoy-with-coraza-module:latest
           push: false
           load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=${{ github.ref }}
+            type=gha,scope=refs/heads/main
+          cache-to: type=gha,mode=max,scope=${{ github.ref }}
 
       - name: Run e2e tests
         working-directory: e2e
