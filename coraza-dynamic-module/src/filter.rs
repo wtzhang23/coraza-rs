@@ -57,15 +57,30 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
         end_of_stream: bool,
     ) -> abi::envoy_dynamic_module_type_on_http_filter_request_headers_status {
         if let Some(route_config) = envoy_filter.get_most_specific_route_config() {
-            self.per_route_config = route_config.downcast_ref::<CorazaPerRouteConfig>().cloned();
+            self.per_route_config = route_config
+                .downcast_ref::<CorazaPerRouteConfig>()
+                .tap(|opt| {
+                    if opt.is_none() {
+                        envoy_log_debug!(
+                            "Per route config is the wrong type. Expected {}.",
+                            std::any::type_name::<CorazaPerRouteConfig>()
+                        );
+                    }
+                })
+                .cloned();
         }
         let tx = if let Some(per_route_config) = self.per_route_config.as_ref() {
+            envoy_log_debug!(
+                "Using per route config: {:?}",
+                per_route_config.settings().directives
+            );
             per_route_config
                 .settings()
-                .directive
+                .directives
                 .as_deref()
                 .and_then(|d| self.config.create_transaction(d))
         } else {
+            envoy_log_debug!("Using default config");
             self.config
                 .settings()
                 .default_directives
