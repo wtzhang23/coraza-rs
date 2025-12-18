@@ -14,8 +14,6 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
-static TX_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
-static WAF_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 #[derive(Debug)]
 pub struct Waf {
@@ -36,9 +34,7 @@ impl Waf {
     /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
     /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
     pub fn new() -> Option<Self> {
-        let guard = WAF_LOCK.lock();
         let inner = unsafe { coraza_new_waf() };
-        drop(guard);
         if inner == 0 {
             return None;
         }
@@ -59,9 +55,7 @@ impl Waf {
     /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
     pub fn new_transaction(&self) -> Option<Transaction> {
         // TODO: allow passing a log callback. Currently, libcoraza does not support this.
-        let guard = TX_LOCK.lock();
-        let inner = unsafe { coraza_new_transaction(self.inner, log_cb as *mut std::ffi::c_void) };
-        drop(guard);
+        let inner = unsafe { coraza_new_transaction(self.inner) };
         if inner == 0 {
             return None;
         }
@@ -88,15 +82,9 @@ impl Waf {
         &self,
         id: CStrArg,
     ) -> Option<Transaction> {
-        let guard = TX_LOCK.lock();
         let inner = unsafe {
-            coraza_new_transaction_with_id(
-                self.inner,
-                id.into_cstr().as_ref().as_ptr() as *mut _,
-                log_cb as *mut std::ffi::c_void,
-            )
+            coraza_new_transaction_with_id(self.inner, id.into_cstr().as_ref().as_ptr() as *mut _)
         };
-        drop(guard);
 
         if inner == 0 {
             return None;
@@ -122,7 +110,6 @@ impl Waf {
     pub fn add_rule<CStrArg: CStrArgument>(&mut self, rule: CStrArg) -> Result<()> {
         let mut err = std::ptr::null_mut();
 
-        let guard = WAF_LOCK.lock();
         let added = unsafe {
             coraza_rules_add(
                 self.inner,
@@ -130,12 +117,11 @@ impl Waf {
                 &mut err,
             )
         };
-        drop(guard);
 
         if added == 0 {
             let err_msg = unsafe { std::ffi::CStr::from_ptr(err).to_string_lossy().to_string() };
             unsafe {
-                libc::free(err as *mut std::ffi::c_void);
+                coraza_free_error(err);
             }
             return Err(Error::InvalidRule(err_msg));
         }
@@ -159,7 +145,6 @@ impl Waf {
     /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
     pub fn add_rule_from_file<CStrArg: CStrArgument>(&mut self, file: CStrArg) -> Result<()> {
         let mut err = std::ptr::null_mut();
-        let guard = WAF_LOCK.lock();
         let added = unsafe {
             coraza_rules_add_file(
                 self.inner,
@@ -167,7 +152,6 @@ impl Waf {
                 &mut err,
             )
         };
-        drop(guard);
         if added == 0 {
             let err_msg = unsafe { std::ffi::CStr::from_ptr(err).to_string_lossy().to_string() };
             unsafe {
@@ -181,9 +165,7 @@ impl Waf {
 
 impl Drop for Waf {
     fn drop(&mut self) {
-        let guard = WAF_LOCK.lock();
         let rv = unsafe { coraza_free_waf(self.inner) };
-        drop(guard);
         debug_assert!(rv == 0, "Failed to free WAF");
     }
 }
@@ -505,9 +487,7 @@ impl Transaction {
 
 impl Drop for Transaction {
     fn drop(&mut self) {
-        let guard = TX_LOCK.lock();
         let rv = unsafe { coraza_free_transaction(self.inner) };
-        drop(guard);
         debug_assert!(rv == 0, "Failed to free transaction");
     }
 }
@@ -570,8 +550,6 @@ impl Drop for Intervention {
         debug_assert!(rv == 0, "Failed to free intervention");
     }
 }
-
-extern "C" fn log_cb(_: *const std::ffi::c_void) {}
 
 #[cfg(test)]
 mod tests {

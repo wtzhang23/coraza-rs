@@ -1,3 +1,0 @@
-[submodule "coraza-sys/libcoraza"]
-	path = coraza-sys/go/libcoraza
-	url = https://github.com/corazawaf/libcoraza.git

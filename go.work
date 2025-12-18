@@ -1,6 +1,6 @@
 // This is a hack to allow the coraza-sys build script to work by letting `go build` run correctly outside of libcoraza's directory.
 
-go 1.24
+go 1.25.5
 
 use (
 	./coraza-sys/go/libcoraza

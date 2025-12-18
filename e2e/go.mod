@@ -1,6 +1,6 @@
 module github.com/wtzhang23/coraza-rs/e2e
 
-go 1.23.0
+go 1.25.5
 
 require (
 	github.com/corazawaf/coraza/v3 v3.3.3
