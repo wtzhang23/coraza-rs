@@ -12,6 +12,7 @@ serde_json.workspace = true
 smallvec.workspace = true
 strum = { workspace = true, features = ["derive"] }
 tap.workspace = true
+url.workspace = true
 
 [lib]
 name = "coraza_dynamic_module"

@@ -411,6 +411,18 @@ impl CorazaFilter {
                 })
                 .or_else(|| (method == Method::CONNECT).then_some(authority))?;
 
+            for (k, v) in path
+                .split_once('?')
+                .into_iter()
+                .flat_map(|(_, query)| url::form_urlencoded::parse(query.as_bytes()))
+            {
+                tx.add_get_request_argument(k.as_ref(), v.as_ref())
+                    .inspect_err(|err| {
+                        envoy_log_debug!("Failed to add get request argument: {:?}", err)
+                    })
+                    .ok()?;
+            }
+
             let request_protocol = envoy_filter.get_attribute_string(
                 abi::envoy_dynamic_module_type_attribute_id::RequestProtocol,
             )?;
