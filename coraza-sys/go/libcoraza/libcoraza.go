@@ -424,8 +424,8 @@ func wafConfigHandleToPtr(config *WafConfigHandle) uintptr {
 }
 
 // It should just be C.CString(s) but we need this to build tests
-func stringToC(s string) *C.char {
-	return C.CString(s)
+func stringToC(s string) (*C.char, C.size_t) {
+	return C.CString(s), C.size_t(len(s))
 }
 
 func nilWafError() C.coraza_error_t {
