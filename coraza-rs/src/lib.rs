@@ -256,12 +256,21 @@ impl Waf {
     ///
     /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
     pub fn new(config: Arc<WafConfig>) -> Result<Self> {
-        let mut raw_err: coraza_error_t = std::ptr::null_mut();
+        let mut raw_err = coraza_error_t {
+            msg: std::ptr::null_mut(),
+            msg_len: 0,
+        };
         let inner = unsafe { coraza_new_waf(config.inner, &mut raw_err as *mut _) };
         if inner == 0 {
-            let err = unsafe { std::ffi::CStr::from_ptr(raw_err) }
-                .to_string_lossy()
-                .to_string();
+            let err = if raw_err.msg.is_null() || raw_err.msg_len == 0 {
+                String::new()
+            } else {
+                unsafe {
+                    let slice =
+                        std::slice::from_raw_parts(raw_err.msg as *const u8, raw_err.msg_len);
+                    String::from_utf8_lossy(slice).to_string()
+                }
+            };
             unsafe {
                 coraza_free_error(raw_err);
             };
@@ -689,13 +698,15 @@ pub struct Intervention {
 impl Intervention {
     /// Get the action of the intervention.
     pub fn action(&self) -> std::result::Result<Option<InterventionAction>, &'_ str> {
-        if self.inner.action.is_null() {
+        if self.inner.action.is_null() || self.inner.action_len == 0 {
             return Ok(None);
         }
         // The action is converted from a golang string which is UTF-8 encoded, so this should never fail.
-        let action = unsafe { std::ffi::CStr::from_ptr(self.inner.action) }
-            .to_str()
-            .expect("Failed to convert action to string");
+        let action = unsafe {
+            let slice =
+                std::slice::from_raw_parts(self.inner.action as *const u8, self.inner.action_len);
+            std::str::from_utf8(slice).expect("Failed to convert action to string")
+        };
         if action.is_empty() {
             return Ok(None);
         }

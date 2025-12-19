@@ -12,13 +12,19 @@ package main
 typedef struct coraza_intervention_t
 {
 	char *action;
+	size_t action_len;
     int status;
 } coraza_intervention_t;
+
+typedef struct coraza_error_t
+{
+	char *msg;
+	size_t msg_len;
+} coraza_error_t;
 
 typedef uintptr_t coraza_waf_config_t;
 typedef uintptr_t coraza_waf_t;
 typedef uintptr_t coraza_transaction_t;
-typedef char *coraza_error_t;
 
 typedef enum coraza_log_level_t {
 	CORAZA_LOG_LEVEL_TRACE,
@@ -141,7 +147,11 @@ func coraza_new_waf(c C.coraza_waf_config_t, er *C.coraza_error_t) C.coraza_waf_
 	wafConfigHandle := ptrToWafConfigHandle(c)
 	waf, err := coraza.NewWAF(wafConfigHandle.config)
 	if err != nil {
-		*er = C.coraza_error_t(C.CString(err.Error()))
+		errMsg := err.Error()
+		*er = C.coraza_error_t{
+			msg:     C.CString(errMsg),
+			msg_len: C.size_t(len(errMsg)),
+		}
 		// we share the pointer, so we shouldn't free it, right?
 		return 0
 	}
@@ -176,8 +186,10 @@ func coraza_intervention(tx C.coraza_transaction_t) *C.coraza_intervention_t {
 	if t.Interruption() == nil {
 		return nil
 	}
+	action := t.Interruption().Action
 	mem := (*C.coraza_intervention_t)(C.malloc(C.size_t(unsafe.Sizeof(C.coraza_intervention_t{}))))
-	mem.action = C.CString(t.Interruption().Action)
+	mem.action = C.CString(action)
+	mem.action_len = C.size_t(len(action))
 	mem.status = C.int(t.Interruption().Status)
 	return mem
 }
@@ -339,7 +351,9 @@ func coraza_free_waf(t C.coraza_waf_t) C.int {
 
 //export coraza_free_error
 func coraza_free_error(e C.coraza_error_t) C.int {
-	C.free(unsafe.Pointer(e))
+	if e.msg != nil {
+		C.free(unsafe.Pointer(e.msg))
+	}
 	return 0
 }
 
@@ -429,7 +443,10 @@ func stringToC(s string) (*C.char, C.size_t) {
 }
 
 func nilWafError() C.coraza_error_t {
-	return C.coraza_error_t(nil)
+	return C.coraza_error_t{
+		msg:     nil,
+		msg_len: 0,
+	}
 }
 
 func main() {}

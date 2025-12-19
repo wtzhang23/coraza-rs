@@ -53,10 +53,13 @@ mod tests {
                 Some(error_cb),
                 c"context" as *const _ as *mut _,
             );
-            let mut err: *mut i8 = std::ptr::null_mut();
+            let mut err = coraza_error_t {
+                msg: std::ptr::null_mut(),
+                msg_len: 0,
+            };
             let waf = coraza_new_waf(config, &mut err as *mut _);
             assert_ne!(waf, 0);
-            assert!(err.is_null());
+            assert!(err.msg.is_null());
             let tx = coraza_new_transaction(waf);
             let source_addr = "127.0.0.1";
             coraza_process_connection(
@@ -93,8 +96,11 @@ mod tests {
             coraza_process_logging(tx);
             let intervention = coraza_intervention(tx).as_mut().unwrap();
             assert_eq!(intervention.status, 403);
-            let action_cstr = std::ffi::CStr::from_ptr(intervention.action);
-            assert_eq!(action_cstr.to_str().unwrap(), "deny");
+            let action = std::slice::from_raw_parts(
+                intervention.action as *const u8,
+                intervention.action_len,
+            );
+            assert_eq!(std::str::from_utf8(action).unwrap(), "deny");
             coraza_free_intervention(intervention);
             coraza_free_transaction(tx);
             coraza_free_waf(waf);
