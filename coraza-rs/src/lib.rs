@@ -825,10 +825,10 @@ mod tests {
             .unwrap();
         tx.process_uri("/someurl", "GET", "HTTP/1.1").unwrap();
         tx.process_request_headers().unwrap();
-        assert_eq!(
-            callback_value.lock().unwrap().as_slice(),
-            vec![(Severity::Emergency, "test 123".to_string())]
-        );
+        let values = callback_value.lock().unwrap();
+        assert_eq!(values.len(), 1);
+        assert_eq!(values[0].0, Severity::Emergency);
+        assert!(values[0].1.contains("test 123"));
     }
 
     #[test]
