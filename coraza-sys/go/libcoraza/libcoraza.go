@@ -11,8 +11,6 @@ typedef struct coraza_intervention_t
 {
 	char *action;
     int status;
-    int pause;
-    int disruptive;
 } coraza_intervention_t;
 
 typedef uintptr_t coraza_waf_config_t;

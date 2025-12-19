@@ -78,8 +78,6 @@ mod tests {
             let intervention = coraza_intervention(tx).as_mut().unwrap();
             assert_eq!(intervention.status, 403);
             assert_eq!(std::ffi::CStr::from_ptr(intervention.action), c"deny");
-            assert_eq!(intervention.disruptive, 0);
-            assert_eq!(intervention.pause, 0);
             coraza_free_intervention(intervention);
             coraza_free_transaction(tx);
             coraza_free_waf(waf);
