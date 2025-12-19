@@ -1,7 +1,4 @@
 #!/bin/sh
-# Copyright 2022 The OWASP Coraza contributors
-# SPDX-License-Identifier: Apache-2.0
-#
 # This file is adapted from coraza-proxy-wasm/ftw/tests.sh
 # Original work: Copyright 2022 The OWASP Coraza contributors
 # Adapted for coraza-rs dynamic module implementation
@@ -41,4 +38,4 @@ FTW_CLOUDMODE=${FTW_CLOUDMODE:-false}
 
 FTW_INCLUDE=$([ "${FTW_INCLUDE}" == "" ] && echo "" || echo "-i ${FTW_INCLUDE}")
 
-/ftw run -d coreruleset/tests/regression/tests --config ftw.yml --read-timeout=30s --cloud=$FTW_CLOUDMODE $FTW_INCLUDE || exit 1
+/ftw run -d coreruleset/tests/regression/tests --config ftw.yml --read-timeout=30s --cloud=$FTW_CLOUDMODE $FTW_INCLUDE

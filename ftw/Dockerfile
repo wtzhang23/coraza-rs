@@ -1,5 +1,6 @@
-# Copyright 2022 The OWASP Coraza contributors
-# SPDX-License-Identifier: Apache-2.0
+# This file is adapted from coraza-proxy-wasm/ftw/Dockerfile
+# Original work: Copyright 2022 The OWASP Coraza contributors
+# Adapted for coraza-rs dynamic module implementation
 
 FROM ghcr.io/coreruleset/go-ftw:1.3.0
 
