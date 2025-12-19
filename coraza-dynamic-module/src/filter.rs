@@ -411,15 +411,10 @@ impl CorazaFilter {
                 })
                 .or_else(|| (method == Method::CONNECT).then_some(authority))?;
 
-            let path_query = path
-                .parse::<http::uri::PathAndQuery>()
-                .inspect_err(|err| envoy_log_debug!("Failed to parse query params: {}", err))
-                .ok()?;
-
-            for (k, v) in path_query
-                .query()
+            for (k, v) in path
+                .split_once('?')
                 .into_iter()
-                .flat_map(|v| url::form_urlencoded::parse(v.as_bytes()))
+                .flat_map(|(_, query)| url::form_urlencoded::parse(query.as_bytes()))
             {
                 tx.add_get_request_argument(k.as_ref(), v.as_ref())
                     .inspect_err(|err| {
