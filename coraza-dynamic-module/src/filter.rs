@@ -371,10 +371,12 @@ impl CorazaFilter {
         (|| {
             let source_address = get_source_address(config.settings(), envoy_filter)?;
             let destination_address = get_destination_address(config.settings(), envoy_filter)?;
+            let source_addr_str = source_address.ip().to_string();
+            let dest_addr_str = destination_address.ip().to_string();
             tx.process_connection(
-                source_address.ip().to_string(),
+                &source_addr_str,
                 source_address.port(),
-                destination_address.ip().to_string(),
+                &dest_addr_str,
                 destination_address.port(),
             )
             .inspect_err(|err| {

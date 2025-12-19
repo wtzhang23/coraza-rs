@@ -1,5 +1,9 @@
 package main
 
+/*
+#include <stdint.h>
+*/
+import "C"
 import (
 	"testing"
 
@@ -31,7 +35,7 @@ func TestCoraza_add_get_args(t *testing.T) {
 	err := nilWafError()
 	waf := coraza_new_waf(config, &err)
 	tt := coraza_new_transaction(waf)
-	coraza_add_get_args(tt, stringToC("aa"), stringToC("bb"))
+	coraza_add_get_args(tt, stringToC("aa"), C.size_t(len("aa")), stringToC("bb"), C.size_t(len("bb")))
 	tx := ptrToTransaction(tt)
 	txi := tx.(plugintypes.TransactionState)
 	argsGet := txi.Variables().ArgsGet()
@@ -39,12 +43,12 @@ func TestCoraza_add_get_args(t *testing.T) {
 	if len(value) != 1 && value[0] != "bb" {
 		t.Fatal("coraza_add_get_args can't add args")
 	}
-	coraza_add_get_args(tt, stringToC("dd"), stringToC("ee"))
+	coraza_add_get_args(tt, stringToC("dd"), C.size_t(len("dd")), stringToC("ee"), C.size_t(len("ee")))
 	value = argsGet.Get("dd")
 	if len(value) != 1 && value[0] != "ee" {
 		t.Fatal("coraza_add_get_args can't add args with another key")
 	}
-	coraza_add_get_args(tt, stringToC("aa"), stringToC("cc"))
+	coraza_add_get_args(tt, stringToC("aa"), C.size_t(len("aa")), stringToC("cc"), C.size_t(len("cc")))
 	value = argsGet.Get("aa")
 	if len(value) != 2 && value[0] != "bb" && value[1] != "cc" {
 		t.Fatal("coraza_add_get_args can't add args with same key more than once")
@@ -89,7 +93,8 @@ func BenchmarkTransactionCreation(b *testing.B) {
 
 func BenchmarkTransactionProcessing(b *testing.B) {
 	config := coraza_new_waf_config()
-	coraza_add_rules_to_waf_config(config, stringToC(`SecRule UNIQUE_ID "" "id:1"`))
+	rules := `SecRule UNIQUE_ID "" "id:1"`
+	coraza_add_rules_to_waf_config(config, stringToC(rules), C.size_t(len(rules)))
 	err := nilWafError()
 	waf := coraza_new_waf(config, &err)
 	for i := 0; i < b.N; i++ {

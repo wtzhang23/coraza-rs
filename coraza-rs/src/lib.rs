@@ -1,7 +1,6 @@
 use std::{pin::Pin, str::FromStr, sync::Arc};
 
 use coraza_sys::*;
-use cstr_argument::CStrArgument;
 use strum::{AsRefStr, Display, EnumString, IntoStaticStr};
 use thiserror::Error;
 
@@ -188,9 +187,14 @@ impl WafConfig {
     /// # Arguments
     ///
     /// * `rules` - The rules to add.
-    pub fn add_rules<CStrArg: CStrArgument>(&mut self, rule: CStrArg) {
+    pub fn add_rules(&mut self, rule: &str) {
+        let len = rule.len();
         unsafe {
-            coraza_add_rules_to_waf_config(self.inner, rule.into_cstr().as_ref().as_ptr() as *mut _)
+            coraza_add_rules_to_waf_config(
+                self.inner,
+                rule.as_ptr() as *mut _,
+                len,
+            )
         };
     }
 
@@ -199,11 +203,13 @@ impl WafConfig {
     /// # Arguments
     ///
     /// * `file` - The file to add rules from.
-    pub fn add_rules_from_file<CStrArg: CStrArgument>(&mut self, file: CStrArg) {
+    pub fn add_rules_from_file(&mut self, file: &str) {
+        let len = file.len();
         unsafe {
             coraza_add_rules_from_file_to_waf_config(
                 self.inner,
-                file.into_cstr().as_ref().as_ptr() as *mut _,
+                file.as_ptr() as *mut _,
+                len,
             )
         };
     }
@@ -314,12 +320,14 @@ impl Waf {
     ///
     /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
     /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
-    pub fn new_transaction_with_id<CStrArg: CStrArgument>(
-        &self,
-        id: CStrArg,
-    ) -> Option<Transaction> {
+    pub fn new_transaction_with_id(&self, id: &str) -> Option<Transaction> {
+        let len = id.len();
         let inner = unsafe {
-            coraza_new_transaction_with_id(self.inner, id.into_cstr().as_ref().as_ptr() as *mut _)
+            coraza_new_transaction_with_id(
+                self.inner,
+                id.as_ptr() as *mut _,
+                len,
+            )
         };
 
         if inner == 0 {
@@ -356,19 +364,23 @@ impl Transaction {
     /// * `Ok(())` - If the connection was processed successfully.
     /// * `Err(Error::ProcessingFailed)` - If the connection was not processed successfully. This in practice
     ///   won't happen, but is included for completeness.
-    pub fn process_connection<CStrArg1: CStrArgument, CStrArg2: CStrArgument>(
+    pub fn process_connection(
         &mut self,
-        source_address: CStrArg1,
+        source_address: &str,
         client_port: u16,
-        server_host: CStrArg2,
+        server_host: &str,
         server_port: u16,
     ) -> Result<()> {
+        let source_len = source_address.len();
+        let server_len = server_host.len();
         let rv = unsafe {
             coraza_process_connection(
                 self.inner,
-                source_address.into_cstr().as_ref().as_ptr() as *mut _,
+                source_address.as_ptr() as *mut _,
+                source_len,
                 client_port.into(),
-                server_host.into_cstr().as_ref().as_ptr() as *mut _,
+                server_host.as_ptr() as *mut _,
+                server_len,
                 server_port.into(),
             )
         };
@@ -406,18 +418,24 @@ impl Transaction {
     /// * `Ok(())` - If the URI was processed successfully.
     /// * `Err(Error::ProcessingFailed)` - If the URI was not processed successfully. This in practice
     ///   won't happen, but is included for completeness.
-    pub fn process_uri<CStrArg1: CStrArgument, CStrArg2: CStrArgument, CStrArg3: CStrArgument>(
+    pub fn process_uri(
         &mut self,
-        uri: CStrArg1,
-        method: CStrArg2,
-        proto: CStrArg3,
+        uri: &str,
+        method: &str,
+        proto: &str,
     ) -> Result<()> {
+        let uri_len = uri.len();
+        let method_len = method.len();
+        let proto_len = proto.len();
         let rv = unsafe {
             coraza_process_uri(
                 self.inner,
-                uri.into_cstr().as_ref().as_ptr() as *mut _,
-                method.into_cstr().as_ref().as_ptr() as *mut _,
-                proto.into_cstr().as_ref().as_ptr() as *mut _,
+                uri.as_ptr() as *mut _,
+                uri_len,
+                method.as_ptr() as *mut _,
+                method_len,
+                proto.as_ptr() as *mut _,
+                proto_len,
             )
         };
         if rv != 0 {
@@ -443,9 +461,9 @@ impl Transaction {
             coraza_add_request_header(
                 self.inner,
                 name.as_ptr() as *mut _,
-                name.len().try_into().expect("Name length too long"),
+                name.len(),
                 value.as_ptr() as *mut _,
-                value.len().try_into().expect("Value length too long"),
+                value.len(),
             )
         };
         if rv != 0 {
@@ -520,16 +538,20 @@ impl Transaction {
     /// * `Ok(())` - If the GET request argument was added successfully.
     /// * `Err(Error::ProcessingFailed)` - If the GET request argument was not added successfully. This in practice
     ///   won't happen, but is included for completeness.
-    pub fn add_get_request_argument<CStrArg1: CStrArgument, CStrArg2: CStrArgument>(
+    pub fn add_get_request_argument(
         &mut self,
-        name: CStrArg1,
-        value: CStrArg2,
+        name: &str,
+        value: &str,
     ) -> Result<()> {
+        let name_len = name.len();
+        let value_len = value.len();
         let rv = unsafe {
             coraza_add_get_args(
                 self.inner,
-                name.into_cstr().as_ref().as_ptr() as *mut _,
-                value.into_cstr().as_ref().as_ptr() as *mut _,
+                name.as_ptr() as *mut _,
+                name_len,
+                value.as_ptr() as *mut _,
+                value_len,
             )
         };
         if rv != 0 {
@@ -555,9 +577,9 @@ impl Transaction {
             coraza_add_response_header(
                 self.inner,
                 name.as_ptr() as *mut _,
-                name.len().try_into().expect("Name length too long"),
+                name.len(),
                 value.as_ptr() as *mut _,
-                value.len().try_into().expect("Value length too long"),
+                value.len(),
             )
         };
         if rv != 0 {
@@ -615,16 +637,18 @@ impl Transaction {
     ///
     /// * `Ok(())` - If the response headers were processed successfully.
     /// * `Err(Error::ProcessingFailed)` - If the response headers were not processed successfully.
-    pub fn process_response_headers<CStrArg: CStrArgument>(
+    pub fn process_response_headers(
         &mut self,
         status: http::StatusCode,
-        proto: CStrArg,
+        proto: &str,
     ) -> Result<()> {
+        let proto_len = proto.len();
         let rv = unsafe {
             coraza_process_response_headers(
                 self.inner,
                 status.as_u16().into(),
-                proto.into_cstr().as_ref().as_ptr() as *mut _,
+                proto.as_ptr() as *mut _,
+                proto_len,
             )
         };
         if rv != 0 {
