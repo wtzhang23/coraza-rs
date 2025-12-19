@@ -328,11 +328,13 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
         let _ = self.transition_waf_request_state(WafRequestState::Finished);
         let _ = self.transition_waf_response_state(WafResponseState::Finished);
         if let Some(tx) = self.tx.as_mut() {
-            if let Err(err) = tx.process_logging() {
-                envoy_log_debug!("Failed to process logging: {:?}", err);
-            }
+            tx.process_logging()
+                .inspect_err(|err| {
+                    envoy_log_debug!("Failed to process logging: {:?}", err);
+                })
+                .ok(); // Ignore errors from logging since it's not critical.
         }
-        
+
         // technically, this includes requests that didn't fully complete; but from the perspective of the
         // WAF, the request was not rejected, so we can count it as allowed.
         if self.tx.is_some() {
