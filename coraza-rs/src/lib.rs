@@ -189,13 +189,7 @@ impl WafConfig {
     /// * `rules` - The rules to add.
     pub fn add_rules(&mut self, rule: &str) {
         let len = rule.len();
-        unsafe {
-            coraza_add_rules_to_waf_config(
-                self.inner,
-                rule.as_ptr() as *mut _,
-                len,
-            )
-        };
+        unsafe { coraza_add_rules_to_waf_config(self.inner, rule.as_ptr() as *mut _, len) };
     }
 
     /// Add rules from a file to the WAF config.
@@ -206,11 +200,7 @@ impl WafConfig {
     pub fn add_rules_from_file(&mut self, file: &str) {
         let len = file.len();
         unsafe {
-            coraza_add_rules_from_file_to_waf_config(
-                self.inner,
-                file.as_ptr() as *mut _,
-                len,
-            )
+            coraza_add_rules_from_file_to_waf_config(self.inner, file.as_ptr() as *mut _, len)
         };
     }
 }
@@ -322,13 +312,8 @@ impl Waf {
     /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
     pub fn new_transaction_with_id(&self, id: &str) -> Option<Transaction> {
         let len = id.len();
-        let inner = unsafe {
-            coraza_new_transaction_with_id(
-                self.inner,
-                id.as_ptr() as *mut _,
-                len,
-            )
-        };
+        let inner =
+            unsafe { coraza_new_transaction_with_id(self.inner, id.as_ptr() as *mut _, len) };
 
         if inner == 0 {
             return None;
@@ -418,12 +403,7 @@ impl Transaction {
     /// * `Ok(())` - If the URI was processed successfully.
     /// * `Err(Error::ProcessingFailed)` - If the URI was not processed successfully. This in practice
     ///   won't happen, but is included for completeness.
-    pub fn process_uri(
-        &mut self,
-        uri: &str,
-        method: &str,
-        proto: &str,
-    ) -> Result<()> {
+    pub fn process_uri(&mut self, uri: &str, method: &str, proto: &str) -> Result<()> {
         let uri_len = uri.len();
         let method_len = method.len();
         let proto_len = proto.len();
@@ -538,11 +518,7 @@ impl Transaction {
     /// * `Ok(())` - If the GET request argument was added successfully.
     /// * `Err(Error::ProcessingFailed)` - If the GET request argument was not added successfully. This in practice
     ///   won't happen, but is included for completeness.
-    pub fn add_get_request_argument(
-        &mut self,
-        name: &str,
-        value: &str,
-    ) -> Result<()> {
+    pub fn add_get_request_argument(&mut self, name: &str, value: &str) -> Result<()> {
         let name_len = name.len();
         let value_len = value.len();
         let rv = unsafe {

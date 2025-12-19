@@ -42,7 +42,11 @@ mod tests {
         unsafe {
             let config = coraza_new_waf_config();
             let rules = c"SecRule REMOTE_ADDR \"127.0.0.1\" \"id:1,phase:1,deny,log,msg:'test 123',status:403\"";
-            coraza_add_rules_to_waf_config(config, rules.as_ptr() as *mut _, rules.to_bytes().len());
+            coraza_add_rules_to_waf_config(
+                config,
+                rules.as_ptr() as *mut _,
+                rules.to_bytes().len(),
+            );
             coraza_add_log_callback_to_waf_config(
                 config,
                 Some(log_cb),
@@ -84,7 +88,12 @@ mod tests {
             coraza_process_request_headers(tx);
             coraza_process_request_body(tx);
             let response_proto = c"HTTP/1.1";
-            coraza_process_response_headers(tx, 200, response_proto.as_ptr() as *mut _, response_proto.to_bytes().len());
+            coraza_process_response_headers(
+                tx,
+                200,
+                response_proto.as_ptr() as *mut _,
+                response_proto.to_bytes().len(),
+            );
             coraza_process_response_body(tx);
             coraza_process_logging(tx);
             let intervention = coraza_intervention(tx).as_mut().unwrap();
