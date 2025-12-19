@@ -324,7 +324,16 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
     }
 
     fn on_stream_complete(&mut self, envoy_filter: &mut EHF) {
-        // we will not transition to the finished state since the stream already completed.
+        // Process logging to generate audit logs
+        let _ = self.transition_waf_request_state(WafRequestState::Finished);
+        let _ = self.transition_waf_response_state(WafResponseState::Finished);
+        if let Some(tx) = self.tx.as_mut() {
+            tx.process_logging()
+                .inspect_err(|err| {
+                    envoy_log_debug!("Failed to process logging: {:?}", err);
+                })
+                .ok(); // Ignore errors from logging since it's not critical.
+        }
 
         // technically, this includes requests that didn't fully complete; but from the perspective of the
         // WAF, the request was not rejected, so we can count it as allowed.
