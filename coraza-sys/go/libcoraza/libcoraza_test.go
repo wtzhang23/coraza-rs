@@ -31,7 +31,9 @@ func TestCoraza_add_get_args(t *testing.T) {
 	err := nilWafError()
 	waf := coraza_new_waf(config, &err)
 	tt := coraza_new_transaction(waf)
-	coraza_add_get_args(tt, stringToC("aa"), stringToC("bb"))
+	aa, aa_len := stringToC("aa")
+	bb, bb_len := stringToC("bb")
+	coraza_add_get_args(tt, aa, aa_len, bb, bb_len)
 	tx := ptrToTransaction(tt)
 	txi := tx.(plugintypes.TransactionState)
 	argsGet := txi.Variables().ArgsGet()
@@ -39,12 +41,16 @@ func TestCoraza_add_get_args(t *testing.T) {
 	if len(value) != 1 && value[0] != "bb" {
 		t.Fatal("coraza_add_get_args can't add args")
 	}
-	coraza_add_get_args(tt, stringToC("dd"), stringToC("ee"))
+	dd, dd_len := stringToC("dd")
+	ee, ee_len := stringToC("ee")
+	coraza_add_get_args(tt, dd, dd_len, ee, ee_len)
 	value = argsGet.Get("dd")
 	if len(value) != 1 && value[0] != "ee" {
 		t.Fatal("coraza_add_get_args can't add args with another key")
 	}
-	coraza_add_get_args(tt, stringToC("aa"), stringToC("cc"))
+	aa, aa_len = stringToC("aa")
+	cc, cc_len := stringToC("cc")
+	coraza_add_get_args(tt, aa, aa_len, cc, cc_len)
 	value = argsGet.Get("aa")
 	if len(value) != 2 && value[0] != "bb" && value[1] != "cc" {
 		t.Fatal("coraza_add_get_args can't add args with same key more than once")
@@ -69,7 +75,7 @@ func TestTransactionInitialization(t *testing.T) {
 
 func TestTxCleaning(t *testing.T) {
 	config := coraza_new_waf_config()
-	var err _Ctype_coraza_error_t
+	err := nilWafError()
 	waf := coraza_new_waf(config, &err)
 	txPtr := coraza_new_transaction(waf)
 	coraza_free_transaction(txPtr)
@@ -89,7 +95,9 @@ func BenchmarkTransactionCreation(b *testing.B) {
 
 func BenchmarkTransactionProcessing(b *testing.B) {
 	config := coraza_new_waf_config()
-	coraza_add_rules_to_waf_config(config, stringToC(`SecRule UNIQUE_ID "" "id:1"`))
+	rules := `SecRule UNIQUE_ID "" "id:1"`
+	rules_ptr, rules_len := stringToC(rules)
+	coraza_add_rules_to_waf_config(config, rules_ptr, rules_len)
 	err := nilWafError()
 	waf := coraza_new_waf(config, &err)
 	for i := 0; i < b.N; i++ {

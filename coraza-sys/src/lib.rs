@@ -41,7 +41,8 @@ mod tests {
     fn simple_get() {
         unsafe {
             let config = coraza_new_waf_config();
-            coraza_add_rules_to_waf_config(config, c"SecRule REMOTE_ADDR \"127.0.0.1\" \"id:1,phase:1,deny,log,msg:'test 123',status:403\"".as_ptr() as *mut _);
+            let rules = "SecRule REMOTE_ADDR \"127.0.0.1\" \"id:1,phase:1,deny,log,msg:'test 123',status:403\"";
+            coraza_add_rules_to_waf_config(config, rules.as_ptr() as *mut _, rules.len());
             coraza_add_log_callback_to_waf_config(
                 config,
                 Some(log_cb),
@@ -52,32 +53,54 @@ mod tests {
                 Some(error_cb),
                 c"context" as *const _ as *mut _,
             );
-            let mut err: *mut i8 = std::ptr::null_mut();
+            let mut err = coraza_error_t {
+                msg: std::ptr::null_mut(),
+                msg_len: 0,
+            };
             let waf = coraza_new_waf(config, &mut err as *mut _);
             assert_ne!(waf, 0);
-            assert!(err.is_null());
+            assert!(err.msg.is_null());
             let tx = coraza_new_transaction(waf);
+            let source_addr = "127.0.0.1";
             coraza_process_connection(
                 tx,
-                c"127.0.0.1".as_ptr() as *mut _,
+                source_addr.as_ptr() as *mut _,
+                source_addr.len(),
                 55555,
                 std::ptr::null_mut(),
+                0,
                 80,
             );
+            let uri = "/someurl";
+            let method = "GET";
+            let proto = "HTTP/1.1";
             coraza_process_uri(
                 tx,
-                c"/someurl".as_ptr() as *mut _,
-                c"GET".as_ptr() as *mut _,
-                c"HTTP/1.1".as_ptr() as *mut _,
+                uri.as_ptr() as *mut _,
+                uri.len(),
+                method.as_ptr() as *mut _,
+                method.len(),
+                proto.as_ptr() as *mut _,
+                proto.len(),
             );
             coraza_process_request_headers(tx);
             coraza_process_request_body(tx);
-            coraza_process_response_headers(tx, 200, c"HTTP/1.1".as_ptr() as *mut _);
+            let response_proto = "HTTP/1.1";
+            coraza_process_response_headers(
+                tx,
+                200,
+                response_proto.as_ptr() as *mut _,
+                response_proto.len(),
+            );
             coraza_process_response_body(tx);
             coraza_process_logging(tx);
             let intervention = coraza_intervention(tx).as_mut().unwrap();
             assert_eq!(intervention.status, 403);
-            assert_eq!(std::ffi::CStr::from_ptr(intervention.action), c"deny");
+            let action = std::slice::from_raw_parts(
+                intervention.action as *const u8,
+                intervention.action_len,
+            );
+            assert_eq!(std::str::from_utf8(action).unwrap(), "deny");
             coraza_free_intervention(intervention);
             coraza_free_transaction(tx);
             coraza_free_waf(waf);

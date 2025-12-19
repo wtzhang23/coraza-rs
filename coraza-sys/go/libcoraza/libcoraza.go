@@ -6,18 +6,25 @@ package main
 #define _LIBCORAZA_H_
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <stdint.h>
 
 typedef struct coraza_intervention_t
 {
 	char *action;
+	size_t action_len;
     int status;
 } coraza_intervention_t;
+
+typedef struct coraza_error_t
+{
+	char *msg;
+	size_t msg_len;
+} coraza_error_t;
 
 typedef uintptr_t coraza_waf_config_t;
 typedef uintptr_t coraza_waf_t;
 typedef uintptr_t coraza_transaction_t;
-typedef char *coraza_error_t;
 
 typedef enum coraza_log_level_t {
 	CORAZA_LOG_LEVEL_TRACE,
@@ -81,15 +88,15 @@ func coraza_new_waf_config() C.coraza_waf_config_t {
 }
 
 //export coraza_add_rules_to_waf_config
-func coraza_add_rules_to_waf_config(c C.coraza_waf_config_t, rules *C.char) {
+func coraza_add_rules_to_waf_config(c C.coraza_waf_config_t, rules *C.char, rules_len C.size_t) {
 	handle := ptrToWafConfigHandle(c)
-	handle.config = handle.config.WithDirectives(C.GoString(rules))
+	handle.config = handle.config.WithDirectives(C.GoStringN(rules, C.int(rules_len)))
 }
 
 //export coraza_add_rules_from_file_to_waf_config
-func coraza_add_rules_from_file_to_waf_config(c C.coraza_waf_config_t, file *C.char) {
+func coraza_add_rules_from_file_to_waf_config(c C.coraza_waf_config_t, file *C.char, file_len C.size_t) {
 	handle := ptrToWafConfigHandle(c)
-	handle.config = handle.config.WithDirectivesFromFile(C.GoString(file))
+	handle.config = handle.config.WithDirectivesFromFile(C.GoStringN(file, C.int(file_len)))
 }
 
 //export coraza_add_log_callback_to_waf_config
@@ -140,7 +147,11 @@ func coraza_new_waf(c C.coraza_waf_config_t, er *C.coraza_error_t) C.coraza_waf_
 	wafConfigHandle := ptrToWafConfigHandle(c)
 	waf, err := coraza.NewWAF(wafConfigHandle.config)
 	if err != nil {
-		*er = C.coraza_error_t(C.CString(err.Error()))
+		errMsg := err.Error()
+		*er = C.coraza_error_t{
+			msg:     C.CString(errMsg),
+			msg_len: C.size_t(len(errMsg)),
+		}
 		// we share the pointer, so we shouldn't free it, right?
 		return 0
 	}
@@ -163,9 +174,9 @@ func coraza_new_transaction(waf C.coraza_waf_t) C.coraza_transaction_t {
 }
 
 //export coraza_new_transaction_with_id
-func coraza_new_transaction_with_id(waf C.coraza_waf_t, id *C.char) C.coraza_transaction_t {
+func coraza_new_transaction_with_id(waf C.coraza_waf_t, id *C.char, id_len C.size_t) C.coraza_transaction_t {
 	handle := ptrToWafHandle(waf)
-	tx := handle.waf.NewTransactionWithID(C.GoString(id))
+	tx := handle.waf.NewTransactionWithID(C.GoStringN(id, C.int(id_len)))
 	return txMapInsert(tx)
 }
 
@@ -175,18 +186,20 @@ func coraza_intervention(tx C.coraza_transaction_t) *C.coraza_intervention_t {
 	if t.Interruption() == nil {
 		return nil
 	}
+	action := t.Interruption().Action
 	mem := (*C.coraza_intervention_t)(C.malloc(C.size_t(unsafe.Sizeof(C.coraza_intervention_t{}))))
-	mem.action = C.CString(t.Interruption().Action)
+	mem.action = C.CString(action)
+	mem.action_len = C.size_t(len(action))
 	mem.status = C.int(t.Interruption().Status)
 	return mem
 }
 
 //export coraza_process_connection
-func coraza_process_connection(t C.coraza_transaction_t, sourceAddress *C.char, clientPort C.int, serverHost *C.char, serverPort C.int) C.int {
+func coraza_process_connection(t C.coraza_transaction_t, sourceAddress *C.char, sourceAddress_len C.size_t, clientPort C.int, serverHost *C.char, serverHost_len C.size_t, serverPort C.int) C.int {
 	tx := ptrToTransaction(t)
-	srcAddr := C.GoString(sourceAddress)
+	srcAddr := C.GoStringN(sourceAddress, C.int(sourceAddress_len))
 	cp := int(clientPort)
-	ch := C.GoString(serverHost)
+	ch := C.GoStringN(serverHost, C.int(serverHost_len))
 	sp := int(serverPort)
 	tx.ProcessConnection(srcAddr, cp, ch, sp)
 	return 0
@@ -204,17 +217,17 @@ func coraza_process_request_body(t C.coraza_transaction_t) C.int {
 // msr->t, r->unparsed_uri, r->method, r->protocol + offset
 //
 //export coraza_process_uri
-func coraza_process_uri(t C.coraza_transaction_t, uri *C.char, method *C.char, proto *C.char) C.int {
+func coraza_process_uri(t C.coraza_transaction_t, uri *C.char, uri_len C.size_t, method *C.char, method_len C.size_t, proto *C.char, proto_len C.size_t) C.int {
 	tx := ptrToTransaction(t)
 
-	tx.ProcessURI(C.GoString(uri), C.GoString(method), C.GoString(proto))
+	tx.ProcessURI(C.GoStringN(uri, C.int(uri_len)), C.GoStringN(method, C.int(method_len)), C.GoStringN(proto, C.int(proto_len)))
 	return 0
 }
 
 //export coraza_add_request_header
-func coraza_add_request_header(t C.coraza_transaction_t, name *C.char, name_len C.int, value *C.char, value_len C.int) C.int {
+func coraza_add_request_header(t C.coraza_transaction_t, name *C.char, name_len C.size_t, value *C.char, value_len C.size_t) C.int {
 	tx := ptrToTransaction(t)
-	tx.AddRequestHeader(C.GoStringN(name, name_len), C.GoStringN(value, value_len))
+	tx.AddRequestHeader(C.GoStringN(name, C.int(name_len)), C.GoStringN(value, C.int(value_len)))
 	return 0
 }
 
@@ -242,16 +255,16 @@ func coraza_append_request_body(t C.coraza_transaction_t, data *C.uchar, length 
 }
 
 //export coraza_add_get_args
-func coraza_add_get_args(t C.coraza_transaction_t, name *C.char, value *C.char) C.int {
+func coraza_add_get_args(t C.coraza_transaction_t, name *C.char, name_len C.size_t, value *C.char, value_len C.size_t) C.int {
 	tx := ptrToTransaction(t)
-	tx.AddGetRequestArgument(C.GoString(name), C.GoString(value))
+	tx.AddGetRequestArgument(C.GoStringN(name, C.int(name_len)), C.GoStringN(value, C.int(value_len)))
 	return 0
 }
 
 //export coraza_add_response_header
-func coraza_add_response_header(t C.coraza_transaction_t, name *C.char, name_len C.int, value *C.char, value_len C.int) C.int {
+func coraza_add_response_header(t C.coraza_transaction_t, name *C.char, name_len C.size_t, value *C.char, value_len C.size_t) C.int {
 	tx := ptrToTransaction(t)
-	tx.AddResponseHeader(C.GoStringN(name, name_len), C.GoStringN(value, value_len))
+	tx.AddResponseHeader(C.GoStringN(name, C.int(name_len)), C.GoStringN(value, C.int(value_len)))
 	return 0
 }
 
@@ -274,9 +287,9 @@ func coraza_process_response_body(t C.coraza_transaction_t) C.int {
 }
 
 //export coraza_process_response_headers
-func coraza_process_response_headers(t C.coraza_transaction_t, status C.int, proto *C.char) C.int {
+func coraza_process_response_headers(t C.coraza_transaction_t, status C.int, proto *C.char, proto_len C.size_t) C.int {
 	tx := ptrToTransaction(t)
-	tx.ProcessResponseHeaders(int(status), C.GoString(proto))
+	tx.ProcessResponseHeaders(int(status), C.GoStringN(proto, C.int(proto_len)))
 	return 0
 }
 
@@ -306,9 +319,9 @@ func coraza_rules_merge(w1 C.coraza_waf_t, w2 C.coraza_waf_t, er **C.char) C.int
 }
 
 //export coraza_request_body_from_file
-func coraza_request_body_from_file(t C.coraza_transaction_t, file *C.char) C.int {
+func coraza_request_body_from_file(t C.coraza_transaction_t, file *C.char, file_len C.size_t) C.int {
 	tx := ptrToTransaction(t)
-	f, err := os.Open(C.GoString(file))
+	f, err := os.Open(C.GoStringN(file, C.int(file_len)))
 	if err != nil {
 		return 1
 	}
@@ -338,7 +351,9 @@ func coraza_free_waf(t C.coraza_waf_t) C.int {
 
 //export coraza_free_error
 func coraza_free_error(e C.coraza_error_t) C.int {
-	C.free(unsafe.Pointer(e))
+	if e.msg != nil {
+		C.free(unsafe.Pointer(e.msg))
+	}
 	return 0
 }
 
@@ -423,12 +438,15 @@ func wafConfigHandleToPtr(config *WafConfigHandle) uintptr {
 }
 
 // It should just be C.CString(s) but we need this to build tests
-func stringToC(s string) *C.char {
-	return C.CString(s)
+func stringToC(s string) (*C.char, C.size_t) {
+	return C.CString(s), C.size_t(len(s))
 }
 
 func nilWafError() C.coraza_error_t {
-	return C.coraza_error_t(nil)
+	return C.coraza_error_t{
+		msg:     nil,
+		msg_len: 0,
+	}
 }
 
 func main() {}

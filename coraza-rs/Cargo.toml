@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 coraza-sys = { version = "~0.1.0", path = "../coraza-sys" }
-cstr-argument.workspace = true
 http.workspace = true
 parking_lot.workspace = true
 strum = { workspace = true, features = ["derive"] }
