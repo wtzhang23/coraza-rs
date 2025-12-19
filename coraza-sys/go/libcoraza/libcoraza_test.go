@@ -35,7 +35,7 @@ func TestCoraza_add_get_args(t *testing.T) {
 	bb, bb_len := stringToC("bb")
 	coraza_add_get_args(tt, aa, aa_len, bb, bb_len)
 	tx := ptrToTransactionHandle(tt)
-	txi := tx.(plugintypes.TransactionState)
+	txi := tx.tx.(plugintypes.TransactionState)
 	argsGet := txi.Variables().ArgsGet()
 	value := argsGet.Get("aa")
 	if len(value) != 1 && value[0] != "bb" {
@@ -70,7 +70,7 @@ func TestTransactionInitialization(t *testing.T) {
 		t.Fatal("Transactions are duplicated")
 	}
 	tx := ptrToTransactionHandle(tt)
-	tx.ProcessConnection("127.0.0.1", 8080, "127.0.0.1", 80)
+	tx.tx.ProcessConnection("127.0.0.1", 8080, "127.0.0.1", 80)
 }
 
 func TestTxCleaning(t *testing.T) {
@@ -79,7 +79,7 @@ func TestTxCleaning(t *testing.T) {
 	waf := coraza_new_waf(config, &err)
 	txPtr := coraza_new_transaction(waf)
 	coraza_free_transaction(txPtr)
-	if tx := ptrToTransaction(txPtr); tx != nil {
+	if tx := ptrToTransactionHandle(txPtr); tx != nil {
 		t.Fatal("Transaction was not removed from the map")
 	}
 }
@@ -102,22 +102,22 @@ func BenchmarkTransactionProcessing(b *testing.B) {
 	waf := coraza_new_waf(config, &err)
 	for i := 0; i < b.N; i++ {
 		txPtr := coraza_new_transaction(waf)
-		tx := ptrToTransaction(txPtr)
-		tx.ProcessConnection("127.0.0.1", 55555, "127.0.0.1", 80)
-		tx.ProcessURI("https://www.example.com/some?params=123", "GET", "HTTP/1.1")
-		tx.AddRequestHeader("Host", "www.example.com")
-		tx.ProcessRequestHeaders()
-		_, err := tx.ProcessRequestBody()
+		tx := ptrToTransactionHandle(txPtr)
+		tx.tx.ProcessConnection("127.0.0.1", 55555, "127.0.0.1", 80)
+		tx.tx.ProcessURI("https://www.example.com/some?params=123", "GET", "HTTP/1.1")
+		tx.tx.AddRequestHeader("Host", "www.example.com")
+		tx.tx.ProcessRequestHeaders()
+		_, err := tx.tx.ProcessRequestBody()
 		if err != nil {
 			b.Fatal("ProcessRequestBody failed: ", err)
 		}
-		tx.AddResponseHeader("Content-Type", "text/html")
-		tx.ProcessResponseHeaders(200, "OK")
-		_, err = tx.ProcessResponseBody()
+		tx.tx.AddResponseHeader("Content-Type", "text/html")
+		tx.tx.ProcessResponseHeaders(200, "OK")
+		_, err = tx.tx.ProcessResponseBody()
 		if err != nil {
 			b.Fatal("ProcessResponseBody failed: ", err)
 		}
-		tx.ProcessLogging()
-		tx.Close()
+		tx.tx.ProcessLogging()
+		tx.tx.Close()
 	}
 }
