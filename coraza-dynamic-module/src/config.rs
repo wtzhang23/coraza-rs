@@ -169,19 +169,19 @@ impl CorazaFilterConfig {
                             }
                             match error_log.location {
                                 ErrorLogLocation::Stdout => match severity {
-                                    Severity::Debug => envoy_log_debug!("{}: {}", severity, msg),
+                                    Severity::Debug => envoy_log_debug!("{}", msg),
                                     Severity::Info | Severity::Notice => {
-                                        envoy_log_info!("{}: {}", severity, msg)
+                                        envoy_log_info!("{}", msg)
                                     }
-                                    Severity::Warning => envoy_log_warn!("{}: {}", severity, msg),
-                                    Severity::Error => envoy_log_error!("{}: {}", severity, msg),
+                                    Severity::Warning => envoy_log_warn!("{}", msg),
+                                    Severity::Error => envoy_log_error!("{}", msg),
                                     Severity::Critical => {
-                                        envoy_log_critical!("{}: {}", severity, msg)
+                                        envoy_log_critical!("{}", msg)
                                     }
                                     Severity::Emergency => {
-                                        envoy_log_critical!("{}: {}", severity, msg)
+                                        envoy_log_critical!("{}", msg)
                                     }
-                                    Severity::Alert => envoy_log_critical!("{}: {}", severity, msg),
+                                    Severity::Alert => envoy_log_critical!("{}", msg),
                                 },
                             }
                         }
@@ -206,19 +206,19 @@ impl CorazaFilterConfig {
                             match debug_log.location {
                                 DebugLogLocation::Stdout => match level {
                                     LogLevel::Trace => {
-                                        envoy_log_trace!("{}: {} {}", level, msg, fields)
+                                        envoy_log_trace!("{} {}", msg, fields)
                                     }
                                     LogLevel::Debug => {
-                                        envoy_log_debug!("{}: {} {}", level, msg, fields)
+                                        envoy_log_debug!("{} {}", msg, fields)
                                     }
                                     LogLevel::Info => {
-                                        envoy_log_info!("{}: {} {}", level, msg, fields)
+                                        envoy_log_info!("{} {}", msg, fields)
                                     }
                                     LogLevel::Warn => {
-                                        envoy_log_warn!("{}: {} {}", level, msg, fields)
+                                        envoy_log_warn!("{} {}", msg, fields)
                                     }
                                     LogLevel::Error => {
-                                        envoy_log_error!("{}: {} {}", level, msg, fields)
+                                        envoy_log_error!("{} {}", msg, fields)
                                     }
                                 },
                             }

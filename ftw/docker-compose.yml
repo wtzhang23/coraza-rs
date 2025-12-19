@@ -44,7 +44,7 @@ services:
     entrypoint: bash
     command:
       - -c
-      - tail -c +0 -f /home/envoy/logs/envoy.log | grep --line-buffered "\[critical\]\[dynamic_modules\]" > /home/envoy/logs/ftw.log
+      - tail -f /home/envoy/logs/envoy.log | grep --line-buffered "Coraza:" >> /home/envoy/logs/ftw.log
     volumes:
       - logs:/home/envoy/logs:rw
   envoy-logs:
