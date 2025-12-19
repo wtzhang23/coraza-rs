@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow.workspace = true
 coraza-rs = { version = "~0.1.0", path = "../coraza-rs", features = ["serde"] }
 envoy-proxy-dynamic-modules-rust-sdk.workspace = true
 http.workspace = true
