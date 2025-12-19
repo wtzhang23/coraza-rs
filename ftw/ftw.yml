@@ -75,6 +75,3 @@ testoverride:
     '922130-1': 'match_regex, likely different error message. To be investigated'
     '922130-2': 'match_regex, likely different error message. To be investigated'
     '922130-7': 'match_regex, likely different error message. To be investigated'
-
-    # coraza-rs dynamic module specific issues
-    '920100-6': 'Request causes Envoy to hang/timeout. Envoy behavior with dynamic modules'
