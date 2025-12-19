@@ -34,7 +34,7 @@ func TestCoraza_add_get_args(t *testing.T) {
 	aa, aa_len := stringToC("aa")
 	bb, bb_len := stringToC("bb")
 	coraza_add_get_args(tt, aa, aa_len, bb, bb_len)
-	tx := ptrToTransaction(tt)
+	tx := ptrToTransactionHandle(tt)
 	txi := tx.(plugintypes.TransactionState)
 	argsGet := txi.Variables().ArgsGet()
 	value := argsGet.Get("aa")
@@ -69,7 +69,7 @@ func TestTransactionInitialization(t *testing.T) {
 	if t2 == tt {
 		t.Fatal("Transactions are duplicated")
 	}
-	tx := ptrToTransaction(tt)
+	tx := ptrToTransactionHandle(tt)
 	tx.ProcessConnection("127.0.0.1", 8080, "127.0.0.1", 80)
 }
 
