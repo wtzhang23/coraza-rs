@@ -17,8 +17,7 @@ pub struct CorazaSettings {
     pub connection_config: Option<ConnectionConfig>,
     pub request_config: Option<RequestConfig>,
     pub response_config: Option<ResponseConfig>,
-    #[serde(default)]
-    pub fail_closed: bool,
+    pub fail_closed: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -3,6 +3,7 @@ resolver = "3"
 members = ["coraza-dynamic-module", "coraza-rs", "coraza-sys"]
 
 [workspace.dependencies]
+anyhow = "1.0.100"
 envoy-proxy-dynamic-modules-rust-sdk = { git = "https://github.com/envoyproxy/envoy", rev = "v1.36.4" }
 http = "1.4.0"
 parking_lot = "0.12.5"
