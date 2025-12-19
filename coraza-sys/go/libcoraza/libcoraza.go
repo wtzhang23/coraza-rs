@@ -58,7 +58,6 @@ import "C"
 import (
 	"io"
 	"os"
-	"reflect"
 	"sync"
 	"unsafe"
 
@@ -435,15 +434,15 @@ func ptrToTransactionHandle(t C.coraza_transaction_t) *TransactionHandle {
 }
 
 func transactionHandleToPtr(handle *TransactionHandle) uintptr {
-	return reflect.ValueOf(&handle).Pointer()
+	return uintptr(unsafe.Pointer(handle))
 }
 
 func wafToPtr(waf *WafHandle) uintptr {
-	return reflect.ValueOf(&waf).Pointer()
+	return uintptr(unsafe.Pointer(waf))
 }
 
 func wafConfigHandleToPtr(config *WafConfigHandle) uintptr {
-	return reflect.ValueOf(&config).Pointer()
+	return uintptr(unsafe.Pointer(config))
 }
 
 // It should just be C.CString(s) but we need this to build tests
