@@ -31,6 +31,7 @@ pub struct CorazaFilter {
     seen_response_body_bytes: usize,
     entered_response_body: bool,
     proto: Option<String>,
+    method: Option<Method>,
 }
 
 impl CorazaFilter {
@@ -46,6 +47,7 @@ impl CorazaFilter {
             seen_response_body_bytes: 0,
             entered_response_body: false,
             proto: None,
+            method: None,
         })
     }
 }
@@ -103,7 +105,12 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
                     .as_ref()
                     .and_then(|c| c.buffer_body_limit)
                 {
-                    if self.seen_request_body_bytes < buffer_body_limit && !end_of_stream {
+                    if self.seen_request_body_bytes < buffer_body_limit
+                        && !end_of_stream
+                        // CONNECT requests need to negotiate the tunnel to make progress, so we should not buffer the body.
+                        && self.method.as_ref()
+                            != Some(&Method::CONNECT)
+                    {
                         abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration
                     } else {
                         abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
@@ -217,7 +224,11 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
                     .as_ref()
                     .and_then(|c| c.buffer_body_limit)
                 {
-                    if self.seen_response_body_bytes < buffer_body_limit && !end_of_stream {
+                    if self.seen_response_body_bytes < buffer_body_limit
+                        && !end_of_stream
+                        // CONNECT requests don't have a response body, so we should always continue
+                        && self.method.as_ref() != Some(&Method::CONNECT)
+                    {
                         abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::StopIteration
                     } else {
                         abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::Continue
@@ -346,7 +357,11 @@ impl CorazaFilter {
         }
 
         let Self {
-            config, tx, proto, ..
+            config,
+            tx,
+            proto,
+            method,
+            ..
         } = self;
         let Some(tx) = tx.as_mut() else {
             return Ok(None);
@@ -371,18 +386,20 @@ impl CorazaFilter {
 
         // process uri
         (|| {
-            let method = envoy_filter
-                .get_request_header_value(":method")
-                .or_else(|| {
-                    envoy_filter.get_attribute_string(
-                        abi::envoy_dynamic_module_type_attribute_id::RequestMethod,
-                    )
-                })?;
-            let method = method
+            let request_method =
+                envoy_filter
+                    .get_request_header_value(":method")
+                    .or_else(|| {
+                        envoy_filter.get_attribute_string(
+                            abi::envoy_dynamic_module_type_attribute_id::RequestMethod,
+                        )
+                    })?;
+            let request_method = request_method
                 .as_slice()
-                .pipe(Method::from_bytes)
-                .inspect_err(|err| envoy_log_debug!("Failed to parse method: {}", err))
+                .pipe(std::str::from_utf8)
+                .inspect_err(|err| envoy_log_debug!("Failed to parse request method: {}", err))
                 .ok()?;
+            *method = request_method.parse::<Method>().ok();
 
             let authority = envoy_filter
                 .get_request_header_value(":authority")
@@ -409,7 +426,7 @@ impl CorazaFilter {
                         .inspect_err(|err| envoy_log_debug!("Failed to parse path: {}", err))
                         .ok()
                 })
-                .or_else(|| (method == Method::CONNECT).then_some(authority))?;
+                .or_else(|| (method.as_ref() == Some(&Method::CONNECT)).then_some(authority))?;
 
             for (k, v) in path
                 .split_once('?')
@@ -434,7 +451,7 @@ impl CorazaFilter {
 
             *proto = Some(request_protocol.to_string());
 
-            tx.process_uri(path, method.as_str(), request_protocol)
+            tx.process_uri(path, request_method, request_protocol)
                 .inspect_err(|err| {
                     envoy_log_debug!("Failed to process URI: {:?}", err);
                 })
