@@ -226,7 +226,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
                 {
                     if self.seen_response_body_bytes < buffer_body_limit
                         && !end_of_stream
-                        // CONNECT requests don't have a response body, so we should always continue
+                        // CONNECT requests need to negotiate the tunnel to make progress, so we should not buffer the body.
                         && self.method.as_ref() != Some(&Method::CONNECT)
                     {
                         abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::StopIteration
