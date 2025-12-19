@@ -9,6 +9,7 @@ fn main() {
     println!("cargo:rerun-if-changed=go/libcoraza/go.sum");
     println!("cargo:rerun-if-changed=go/libcoraza/libcoraza.go");
     println!("cargo:rerun-if-changed=go/libcoraza/log.go");
+    println!("cargo:rerun-if-changed=go/libcoraza/fs.go");
     println!("cargo:rerun-if-changed=go/libcoraza/libcoraza_types.h");
 
     let build_dir = out_dir.join("build");
@@ -29,6 +30,7 @@ fn main() {
         .arg(build_dir.join("coraza.h"))
         .arg(src_dir.join("libcoraza.go"))
         .arg(src_dir.join("log.go"))
+        .arg(src_dir.join("fs.go"))
         .status()
         .expect("Failed to build headers");
     if !status.success() {
@@ -44,6 +46,7 @@ fn main() {
         .arg(build_dir.join("libcoraza.a"))
         .arg(src_dir.join("libcoraza.go"))
         .arg(src_dir.join("log.go"))
+        .arg(src_dir.join("fs.go"))
         .status()
         .expect("Failed to build coraza");
     if !status.success() {

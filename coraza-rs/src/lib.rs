@@ -759,7 +759,7 @@ extern "C" fn error_callback(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::{path::Path, sync::Mutex};
 
     use super::*;
 
@@ -834,5 +834,38 @@ mod tests {
             }
             _ => panic!("Expected Error::FailedToCreateWaf"),
         }
+    }
+
+    #[test]
+    fn coreruleset_fs() {
+        let mut config = WafConfig::new();
+        config.add_rules("Include @owasp_crs/*.conf");
+        config.add_rules("Include @coraza.conf-recommended");
+        config.add_rules("Include @crs-setup.conf.example");
+        let config = Arc::new(config);
+        let waf = Waf::new(config).expect("Failed to create WAF");
+        waf.new_transaction().unwrap();
+    }
+
+    #[test]
+    fn local_fs() {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let file_path = manifest_dir.join("src").join("testdata").join("test.conf");
+        assert!(file_path.exists());
+        let mut config = WafConfig::new();
+        config.add_rules_from_file(file_path.to_str().unwrap());
+        let config = Arc::new(config);
+        let waf = Waf::new(config).expect("Failed to create WAF");
+        let mut tx = waf.new_transaction().unwrap();
+        tx.process_connection("127.0.0.1", 55555, "127.0.0.1", 80)
+            .unwrap();
+        tx.process_uri("/someurl", "GET", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        let intervention = tx.intervention().unwrap();
+        assert_eq!(intervention.status(), Some(http::StatusCode::FORBIDDEN));
+        assert_eq!(
+            intervention.action().unwrap().unwrap(),
+            InterventionAction::Deny
+        );
     }
 }

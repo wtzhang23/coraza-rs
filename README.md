@@ -25,6 +25,8 @@ This repository contains the following crates:
 
 ## Testing
 
+### End-to-End Tests
+
 1. Build the Docker image:
    ```bash
    docker build -t envoy-with-coraza-module:latest .
@@ -33,3 +35,23 @@ This repository contains the following crates:
    ```bash
    cd e2e && go test ./...
    ```
+
+### FTW Tests
+
+[FTW (Framework for Testing WAFs)](https://github.com/coreruleset/ftw) tests are available to validate WAF rule behavior using the OWASP CRS regression test suite.
+
+1. Build the Docker image:
+   ```bash
+   docker build -t envoy-with-coraza-module:latest .
+   ```
+
+2. Run FTW tests:
+   ```bash
+   cd ftw
+   docker compose build --pull
+   docker compose run --rm ftw
+   ```
+
+The CRS rules are embedded in Coraza via rootfs, so no manual rule setup is required.
+
+See the [ftw/README.md](./ftw/README.md) for more details.
