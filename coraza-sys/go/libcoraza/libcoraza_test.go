@@ -1,9 +1,5 @@
 package main
 
-/*
-#include <stdint.h>
-*/
-import "C"
 import (
 	"testing"
 
