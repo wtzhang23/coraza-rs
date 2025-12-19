@@ -1,0 +1,86 @@
+admin:
+  address:
+    socket_address: { address: 127.0.0.1, port_value: 9901 }
+static_resources:
+  listeners:
+    - name: listener_0
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 8080 }
+      filter_chains:
+        - filters:
+            - name: io.envoyproxy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ingress_http
+                route_config:
+                  virtual_hosts:
+                    - name: local_service
+                      domains:
+                        - "*"
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: local_service
+                http_filters:
+                  - name: coraza-dynamic-module
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
+                      dynamic_module_config:
+                        name: coraza_dynamic_module
+                        do_not_close: true
+                        load_globally: true
+                      filter_name: coraza
+                      filter_config:
+                        "@type": "type.googleapis.com/google.protobuf.StringValue"
+                        value: |
+                          {
+                            "directives_map": {
+                              "default": {
+                                "rules": [
+                                  {
+                                    "type": "file",
+                                    "value": "/examples/coraza.conf"
+                                  }
+                                ],
+                                "error_log": [
+                                  {
+                                    "filter": "debug",
+                                    "location": {
+                                      "type": "stdout"
+                                    }
+                                  }
+                                ],
+                                "debug_log": [
+                                  {
+                                    "filter": "debug",
+                                    "location": {
+                                      "type": "stdout"
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            "default_directives": "default",
+                            "request_config": {
+                              "buffer_body_limit": 1024
+                            },
+                            "response_config": {
+                              "buffer_body_limit": 1024
+                            }
+                          }
+                  - name: router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+    - name: local_service
+      type: STRICT_DNS
+      load_assignment:
+        cluster_name: local_service
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: backend
+                      port_value: 8081

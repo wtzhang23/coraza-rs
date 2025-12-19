@@ -1,0 +1,26 @@
+services:
+  envoy:
+    image: envoy-with-coraza-module:latest
+    container_name: coraza-example-envoy
+    ports:
+      - "8080:8080"
+      - "9901:9901"
+    volumes:
+      - .:/examples
+    command:
+      - --log-level
+      - info
+      - --concurrency
+      - "1"
+      - --config-path
+      - /examples/envoy.yaml
+    depends_on:
+      - backend
+
+  backend:
+    image: mccutchen/go-httpbin:latest
+    container_name: coraza-example-backend
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081

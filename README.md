@@ -4,8 +4,6 @@ Rust bindings and Envoy dynamic module for [libcoraza](https://github.com/coraza
 
 ## Crates
 
-This repository contains the following crates:
-
 - **coraza-sys:** Raw bindings to [libcoraza](https://github.com/corazawaf/libcoraza) generated with [bindgen](https://github.com/rust-lang/rust-bindgen)
 - **coraza-rs:** An idiomatic, safe API built on top of `coraza-sys`
 - **coraza-dynamic-module:** A [dynamic module](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules) loadable by Envoy
@@ -23,6 +21,10 @@ This repository contains the following crates:
    ```
    The dynamic module will be created in the Cargo [build cache](https://doc.rust-lang.org/cargo/reference/build-cache.html#build-cache).
 
+## Examples
+
+See the [examples](./examples) directory for a minimal working example with test script.
+
 ## Testing
 
 ### End-to-End Tests
@@ -38,13 +40,12 @@ This repository contains the following crates:
 
 ### FTW Tests
 
-[FTW (Framework for Testing WAFs)](https://github.com/coreruleset/ftw) tests are available to validate WAF rule behavior using the OWASP CRS regression test suite.
+[FTW (Framework for Testing WAFs)](https://github.com/coreruleset/go-ftw) tests validate WAF rule behavior using the OWASP CRS regression test suite.
 
 1. Build the Docker image:
    ```bash
    docker build -t envoy-with-coraza-module:latest .
    ```
-
 2. Run FTW tests:
    ```bash
    cd ftw
@@ -53,5 +54,3 @@ This repository contains the following crates:
    ```
 
 The CRS rules are embedded in Coraza via rootfs, so no manual rule setup is required.
-
-See the [ftw/README.md](./ftw/README.md) for more details.

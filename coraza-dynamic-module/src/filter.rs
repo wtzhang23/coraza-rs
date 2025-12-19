@@ -411,6 +411,23 @@ impl CorazaFilter {
                 })
                 .or_else(|| (method == Method::CONNECT).then_some(authority))?;
 
+            let path_query = path
+                .parse::<http::uri::PathAndQuery>()
+                .inspect_err(|err| envoy_log_debug!("Failed to parse query params: {}", err))
+                .ok()?;
+
+            for (k, v) in path_query
+                .query()
+                .into_iter()
+                .flat_map(|v| url::form_urlencoded::parse(v.as_bytes()))
+            {
+                tx.add_get_request_argument(k.as_ref(), v.as_ref())
+                    .inspect_err(|err| {
+                        envoy_log_debug!("Failed to add get request argument: {:?}", err)
+                    })
+                    .ok()?;
+            }
+
             let request_protocol = envoy_filter.get_attribute_string(
                 abi::envoy_dynamic_module_type_attribute_id::RequestProtocol,
             )?;
