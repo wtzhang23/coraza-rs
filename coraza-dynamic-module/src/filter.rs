@@ -432,49 +432,56 @@ impl CorazaFilter {
 
         // process uri
         (|| -> AnyhowResult<()> {
-            let request_method = envoy_filter
-                .get_request_header_value(":method")
-                .or_else(|| {
-                    envoy_filter.get_attribute_string(
-                        abi::envoy_dynamic_module_type_attribute_id::RequestMethod,
-                    )
-                })
-                .context("Missing :method header and RequestMethod attribute")?;
-            let request_method = request_method
-                .as_slice()
-                .pipe(std::str::from_utf8)
+            let request_method_opt =
+                envoy_filter
+                    .get_request_header_value(":method")
+                    .or_else(|| {
+                        envoy_filter.get_attribute_string(
+                            abi::envoy_dynamic_module_type_attribute_id::RequestMethod,
+                        )
+                    });
+            let request_method_opt = request_method_opt
+                .as_ref()
+                .map(|s| s.as_slice().pipe(std::str::from_utf8))
+                .transpose()
                 .context("Failed to parse request method as UTF-8")?;
-            *method = request_method.parse::<Method>().ok();
+            *method = request_method_opt.and_then(|s| s.parse::<Method>().ok());
 
-            let authority = envoy_filter
+            let authority_opt = envoy_filter
                 .get_request_header_value(":authority")
                 .or_else(|| {
                     envoy_filter.get_attribute_string(
                         abi::envoy_dynamic_module_type_attribute_id::RequestHost,
                     )
-                })
-                .context("Missing :authority header and RequestHost attribute")?;
-            let authority = authority
-                .as_slice()
-                .pipe(std::str::from_utf8)
+                });
+            let authority_opt = authority_opt
+                .as_ref()
+                .map(|s| s.as_slice().pipe(std::str::from_utf8))
+                .transpose()
                 .context("Failed to parse authority as UTF-8")?;
 
             let path_opt = envoy_filter.get_request_header_value(":path").or_else(|| {
                 envoy_filter
                     .get_attribute_string(abi::envoy_dynamic_module_type_attribute_id::RequestPath)
             });
-            let path = path_opt
+            let path_opt = path_opt
                 .as_ref()
-                .and_then(|v| v.as_slice().pipe(std::str::from_utf8).ok())
-                .or_else(|| (method.as_ref() == Some(&Method::CONNECT)).then_some(authority))
-                .context(
-                    "Missing :path header, RequestPath attribute, and not a CONNECT request",
-                )?;
+                .map(|s| s.as_slice().pipe(std::str::from_utf8))
+                .transpose()
+                .context("Failed to parse path as UTF-8")?
+                .or_else(|| {
+                    if method.as_ref() == Some(&Method::CONNECT) {
+                        authority_opt
+                    } else {
+                        None
+                    }
+                });
 
-            for (k, v) in path
-                .split_once('?')
+            for (k, v) in path_opt
+                .and_then(|s| s.split_once('?'))
+                .map(|(_, query)| url::form_urlencoded::parse(query.as_bytes()))
                 .into_iter()
-                .flat_map(|(_, query)| url::form_urlencoded::parse(query.as_bytes()))
+                .flatten()
             {
                 tx.add_get_request_argument(k.as_ref(), v.as_ref())
                     .context(format!("Failed to add GET argument: {}={}", k, v))?;
@@ -490,11 +497,12 @@ impl CorazaFilter {
 
             *proto = Some(request_protocol.to_string());
 
-            tx.process_uri(path, request_method, request_protocol)
-                .context(format!(
-                    "Failed to process URI: {} {} {}",
-                    request_method, path, request_protocol
-                ))?;
+            tx.process_uri(
+                path_opt.unwrap_or(""),
+                request_method_opt.unwrap_or(""),
+                request_protocol,
+            )
+            .context("Failed to process URI")?;
             Ok(())
         })()
         .context(FailureReason::ProcessingFailed)?;
