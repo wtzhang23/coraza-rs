@@ -117,6 +117,7 @@ dependencies = [
  "cstr-argument",
  "http",
  "parking_lot",
+ "serde",
  "strum",
  "thiserror",
 ]

@@ -8,9 +8,11 @@ fn main() {
     println!("cargo:rerun-if-changed=go/libcoraza/go.mod");
     println!("cargo:rerun-if-changed=go/libcoraza/go.sum");
     println!("cargo:rerun-if-changed=go/libcoraza/libcoraza.go");
+    println!("cargo:rerun-if-changed=go/libcoraza/log.go");
+    println!("cargo:rerun-if-changed=go/libcoraza/libcoraza_types.h");
 
     let build_dir = out_dir.join("build");
-    let src_dir = crate_dir.join("go/libcoraza");
+    let src_dir = crate_dir.join("go/libcoraza").canonicalize().unwrap();
 
     // clean build directory
     std::fs::remove_dir_all(&build_dir).unwrap_or_else(|e| {
@@ -26,6 +28,7 @@ fn main() {
         .arg("-exportheader")
         .arg(build_dir.join("coraza.h"))
         .arg(src_dir.join("libcoraza.go"))
+        .arg(src_dir.join("log.go"))
         .status()
         .expect("Failed to build headers");
     if !status.success() {
@@ -40,18 +43,30 @@ fn main() {
         .arg("-o")
         .arg(build_dir.join("libcoraza.a"))
         .arg(src_dir.join("libcoraza.go"))
+        .arg(src_dir.join("log.go"))
         .status()
         .expect("Failed to build coraza");
     if !status.success() {
         panic!("Failed to build coraza");
     }
 
+    // generate bindings
     let bindings = bindgen::Builder::default()
         .header(build_dir.join("coraza.h").to_string_lossy())
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .allowlist_function("coraza_.*")
         .allowlist_type("coraza_.*")
         .allowlist_var("coraza_.*")
+        .derive_debug(true)
+        .derive_default(true)
+        .derive_eq(true)
+        .derive_copy(true)
+        .derive_ord(true)
+        .derive_partialeq(true)
+        .derive_partialord(true)
+        .derive_hash(true)
+        .rustified_enum("coraza_log_level_t")
+        .rustified_enum("coraza_severity_t")
         .generate()
         .expect("Unable to generate bindings");
     let out_path = out_dir.join("bindings.rs");
