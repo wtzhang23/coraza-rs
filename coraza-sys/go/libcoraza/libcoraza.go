@@ -1,3 +1,4 @@
+// Copied mostly from https://github.com/corazawaf/libcoraza
 package main
 
 /*
@@ -55,7 +56,6 @@ import (
 	"unsafe"
 
 	"github.com/corazawaf/coraza/v3"
-
 	"github.com/corazawaf/coraza/v3/types"
 )
 
@@ -73,7 +73,7 @@ type WafHandle struct {
 
 //export coraza_new_waf_config
 func coraza_new_waf_config() C.coraza_waf_config_t {
-	config := coraza.NewWAFConfig()
+	config := coraza.NewWAFConfig().WithRootFS(rootFS)
 	handle := &WafConfigHandle{
 		config: config,
 	}

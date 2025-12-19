@@ -1,0 +1,109 @@
+# Copyright 2022 The OWASP Coraza contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# This file is adapted from coraza-proxy-wasm/ftw/envoy-config.yaml
+# Original work: Copyright 2022 The OWASP Coraza contributors
+# Adapted for coraza-rs dynamic module implementation (uses dynamic modules instead of WASM)
+static_resources:
+  listeners:
+    - address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 80
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ingress_http
+                codec_type: auto
+                http_protocol_options:
+                  # accept_http_10 handles pre-HTTP/1.1 traffics for CRS regression tests against legacy HTTP versions
+                  accept_http_10: true
+                route_config:
+                  virtual_hosts:
+                    - name: local_route
+                      domains:
+                        - "*"
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: local_server
+                http_filters:
+                  - name: coraza-dynamic-module
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
+                      dynamic_module_config:
+                        name: coraza_dynamic_module
+                        do_not_close: true
+                        load_globally: true
+                      filter_name: coraza
+                      filter_config:
+                        "@type": "type.googleapis.com/google.protobuf.StringValue"
+                        value: |
+                          {
+                            "directives_map": {
+                              "default": {
+                                "rules": [
+                                  {
+                                    "type": "inline",
+                                    "value": "Include @coraza.conf-recommended"
+                                  },
+                                  {
+                                    "type": "inline",
+                                    "value": "Include @crs-setup.conf.example"
+                                  },
+                                  {
+                                    "type": "file",
+                                    "value": "/conf/ftw-config.conf"
+                                  },
+                                  {
+                                    "type": "inline",
+                                    "value": "Include @owasp_crs/*.conf"
+                                  }
+                                ],
+                                "error_log": [
+                                  {
+                                    "filter": "debug",
+                                    "location": {
+                                      "type": "stdout"
+                                    }
+                                  }
+                                ],
+                                "debug_log": [
+                                  {
+                                    "filter": "debug",
+                                    "location": {
+                                      "type": "stdout"
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            "default_directives": "default",
+                            "request_config": {
+                              "buffer_body_limit": 1024
+                            },
+                            "response_config": {
+                              "buffer_body_limit": 1024
+                            }
+                          }
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+    - name: local_server
+      connect_timeout: 6000s
+      type: STRICT_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: local_server
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: albedo
+                      port_value: 8080
