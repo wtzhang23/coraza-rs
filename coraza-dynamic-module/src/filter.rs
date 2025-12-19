@@ -371,7 +371,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
         if let Some(tx) = self.tx.as_mut() {
             tx.process_logging()
                 .inspect_err(|err| {
-                    envoy_log_debug!("Failed to process logging: {:#}", err);
+                    envoy_log_debug!("Error in on_stream_complete: {:#}", err);
                 })
                 .ok();
         }
