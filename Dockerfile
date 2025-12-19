@@ -9,7 +9,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM base AS builder
 RUN apt-get update && apt-get install -y clang autoconf automake libtool m4 make golang-go
 RUN go install golang.org/dl/go1.25.5@latest && \
-    $(go env GOPATH)/bin/go1.25.5 download
+    /root/go/bin/go1.25.5 download
 ENV GO=/root/go/bin/go1.25.5
 COPY --from=planner /recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json

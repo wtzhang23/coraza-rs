@@ -18,15 +18,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5192cca8006f1fd4f7237516f40fa183bb07f8fbdfedaa0036de5ea9b0b45e78"
 
 [[package]]
-name = "autotools"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef941527c41b0fc0dd48511a8154cd5fc7e29200a0ff8b7203c5d777dbc795cf"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "bindgen"
 version = "0.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -79,16 +70,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b35204fbdc0b3f4446b89fc1ac2cf84a8a68971995d0bf2e925ec7cd960f9cb3"
 
 [[package]]
-name = "cc"
-version = "1.2.49"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90583009037521a116abf44494efecd645ba48b6622457080f080b85544e2215"
-dependencies = [
- "find-msvc-tools",
- "shlex",
-]
-
-[[package]]
 name = "cexpr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -135,7 +116,6 @@ dependencies = [
  "coraza-sys",
  "cstr-argument",
  "http",
- "libc",
  "parking_lot",
  "strum",
  "thiserror",
@@ -145,7 +125,6 @@ dependencies = [
 name = "coraza-sys"
 version = "0.1.0"
 dependencies = [
- "autotools",
  "bindgen 0.72.1",
 ]
 
@@ -179,12 +158,6 @@ dependencies = [
  "bindgen 0.70.1",
  "mockall",
 ]
-
-[[package]]
-name = "find-msvc-tools"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a3076410a55c90011c298b04d0cfa770b00fa04e1e3c97d3f6c9de105a03844"
 
 [[package]]
 name = "fragile"

@@ -11,7 +11,9 @@ var waf *coraza.WAF
 var wafPtr uint64
 
 func TestWafInitialization(t *testing.T) {
-	waf2 := coraza_new_waf()
+	config := coraza_new_waf_config()
+	err := nilWafError()
+	waf2 := coraza_new_waf(config, &err)
 	wafPtr = uint64(waf2)
 }
 
@@ -25,7 +27,9 @@ func TestAddRulesToWaf(t *testing.T) {
 }
 
 func TestCoraza_add_get_args(t *testing.T) {
-	waf := coraza_new_waf()
+	config := coraza_new_waf_config()
+	err := nilWafError()
+	waf := coraza_new_waf(config, &err)
 	tt := coraza_new_transaction(waf)
 	coraza_add_get_args(tt, stringToC("aa"), stringToC("bb"))
 	tx := ptrToTransaction(tt)
@@ -48,7 +52,9 @@ func TestCoraza_add_get_args(t *testing.T) {
 }
 
 func TestTransactionInitialization(t *testing.T) {
-	waf := coraza_new_waf()
+	config := coraza_new_waf_config()
+	err := nilWafError()
+	waf := coraza_new_waf(config, &err)
 	tt := coraza_new_transaction(waf)
 	if tt == 0 {
 		t.Fatal("Transaction initialization failed")
@@ -62,7 +68,9 @@ func TestTransactionInitialization(t *testing.T) {
 }
 
 func TestTxCleaning(t *testing.T) {
-	waf := coraza_new_waf()
+	config := coraza_new_waf_config()
+	var err _Ctype_coraza_error_t
+	waf := coraza_new_waf(config, &err)
 	txPtr := coraza_new_transaction(waf)
 	coraza_free_transaction(txPtr)
 	if tx := ptrToTransaction(txPtr); tx != nil {
@@ -71,15 +79,19 @@ func TestTxCleaning(t *testing.T) {
 }
 
 func BenchmarkTransactionCreation(b *testing.B) {
-	waf := coraza_new_waf()
+	config := coraza_new_waf_config()
+	err := nilWafError()
+	waf := coraza_new_waf(config, &err)
 	for i := 0; i < b.N; i++ {
 		coraza_new_transaction(waf)
 	}
 }
 
 func BenchmarkTransactionProcessing(b *testing.B) {
-	waf := coraza_new_waf()
-	coraza_rules_add(waf, stringToC(`SecRule UNIQUE_ID "" "id:1"`), nil)
+	config := coraza_new_waf_config()
+	coraza_add_rules_to_waf_config(config, stringToC(`SecRule UNIQUE_ID "" "id:1"`))
+	err := nilWafError()
+	waf := coraza_new_waf(config, &err)
 	for i := 0; i < b.N; i++ {
 		txPtr := coraza_new_transaction(waf)
 		tx := ptrToTransaction(txPtr)
