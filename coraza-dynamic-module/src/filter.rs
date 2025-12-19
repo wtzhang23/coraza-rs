@@ -396,9 +396,7 @@ impl CorazaFilter {
     where
         'b: 'a,
     {
-        if let Some(intervention) = self
-            .transition_waf_request_state(WafRequestState::Headers)?
-        {
+        if let Some(intervention) = self.transition_waf_request_state(WafRequestState::Headers)? {
             return Ok(Some(intervention));
         }
 
@@ -467,11 +465,7 @@ impl CorazaFilter {
             });
             let path = path_opt
                 .as_ref()
-                .and_then(|v| {
-                    v.as_slice()
-                        .pipe(std::str::from_utf8)
-                        .ok()
-                })
+                .and_then(|v| v.as_slice().pipe(std::str::from_utf8).ok())
                 .or_else(|| (method.as_ref() == Some(&Method::CONNECT)).then_some(authority))
                 .context(
                     "Missing :path header, RequestPath attribute, and not a CONNECT request",
@@ -536,8 +530,8 @@ impl CorazaFilter {
         'b: 'a,
     {
         self.entered_response_body = true;
-        if let Some(intervention) = self
-            .transition_waf_request_state(WafRequestState::RequestBody)?
+        if let Some(intervention) =
+            self.transition_waf_request_state(WafRequestState::RequestBody)?
         {
             return Ok(Some(intervention));
         }
@@ -565,9 +559,7 @@ impl CorazaFilter {
     }
 
     fn on_request_trailers_helper(&mut self) -> AnyhowResult<Option<Intervention>> {
-        if let Some(intervention) = self
-            .transition_waf_request_state(WafRequestState::Trailers)?
-        {
+        if let Some(intervention) = self.transition_waf_request_state(WafRequestState::Trailers)? {
             return Ok(Some(intervention));
         }
 
@@ -588,9 +580,7 @@ impl CorazaFilter {
         envoy_filter: &mut EHF,
         end_of_stream: bool,
     ) -> AnyhowResult<Option<Intervention>> {
-        if let Some(intervention) = self
-            .transition_waf_response_state(WafResponseState::Headers)?
-        {
+        if let Some(intervention) = self.transition_waf_response_state(WafResponseState::Headers)? {
             return Ok(Some(intervention));
         }
 
@@ -645,8 +635,8 @@ impl CorazaFilter {
         envoy_filter: &mut EHF,
         end_of_stream: bool,
     ) -> AnyhowResult<Option<Intervention>> {
-        if let Some(intervention) = self
-            .transition_waf_response_state(WafResponseState::ResponseBody)?
+        if let Some(intervention) =
+            self.transition_waf_response_state(WafResponseState::ResponseBody)?
         {
             return Ok(Some(intervention));
         }
@@ -674,8 +664,8 @@ impl CorazaFilter {
     }
 
     fn on_response_trailers_helper(&mut self) -> AnyhowResult<Option<Intervention>> {
-        if let Some(intervention) = self
-            .transition_waf_response_state(WafResponseState::Trailers)?
+        if let Some(intervention) =
+            self.transition_waf_response_state(WafResponseState::Trailers)?
         {
             return Ok(Some(intervention));
         }
@@ -861,7 +851,8 @@ fn get_address_from_attribute<EHF: EnvoyHttpFilter>(
         .as_slice()
         .pipe(std::str::from_utf8)
         .context("Address attribute not valid UTF-8")?;
-    raw.parse().context("Address attribute not a valid IP address")
+    raw.parse()
+        .context("Address attribute not a valid IP address")
 }
 
 /* ************************************************************** */
@@ -905,7 +896,8 @@ impl CorazaFilter {
                 (WafRequestState::RequestBody, WafRequestState::Trailers)
                 | (WafRequestState::RequestBody, WafRequestState::Finished) => {
                     *request_state = WafRequestState::Trailers;
-                    tx.process_request_body().context("Failed to process request body")?;
+                    tx.process_request_body()
+                        .context("Failed to process request body")?;
                 }
                 (WafRequestState::Trailers, WafRequestState::Finished) => {
                     *request_state = WafRequestState::Finished;
@@ -945,7 +937,8 @@ impl CorazaFilter {
                 (WafResponseState::ResponseBody, WafResponseState::Trailers)
                 | (WafResponseState::ResponseBody, WafResponseState::Finished) => {
                     *response_state = WafResponseState::Trailers;
-                    tx.process_response_body().context("Failed to process response body")?;
+                    tx.process_response_body()
+                        .context("Failed to process response body")?;
                 }
                 (WafResponseState::Trailers, WafResponseState::Finished) => {
                     *response_state = WafResponseState::Finished;
