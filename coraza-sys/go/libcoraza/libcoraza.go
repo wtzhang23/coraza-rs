@@ -11,8 +11,6 @@ typedef struct coraza_intervention_t
 {
 	char *action;
     int status;
-    int pause;
-    int disruptive;
 } coraza_intervention_t;
 
 typedef uintptr_t coraza_waf_config_t;
@@ -20,8 +18,32 @@ typedef uintptr_t coraza_waf_t;
 typedef uintptr_t coraza_transaction_t;
 typedef char *coraza_error_t;
 
-typedef void (*coraza_log_cb) (const void *);
-void send_log_to_cb(coraza_log_cb cb, const char *msg);
+typedef enum coraza_log_level_t {
+	CORAZA_LOG_LEVEL_TRACE,
+	CORAZA_LOG_LEVEL_DEBUG,
+	CORAZA_LOG_LEVEL_INFO,
+	CORAZA_LOG_LEVEL_WARN,
+	CORAZA_LOG_LEVEL_ERROR,
+} coraza_log_level_t;
+
+typedef void (*coraza_log_cb) (void *, coraza_log_level_t, const char *msg, const char *fields);
+
+typedef enum coraza_severity_t {
+	CORAZA_SEVERITY_DEBUG,
+	CORAZA_SEVERITY_INFO,
+	CORAZA_SEVERITY_NOTICE,
+	CORAZA_SEVERITY_WARNING,
+	CORAZA_SEVERITY_ERROR,
+	CORAZA_SEVERITY_CRITICAL,
+	CORAZA_SEVERITY_ALERT,
+	CORAZA_SEVERITY_EMERGENCY,
+} coraza_severity_t;
+
+typedef void (*coraza_error_cb) (void *, coraza_severity_t, const char *msg);
+
+static void call_error_cb(coraza_error_cb cb, void *ctx, coraza_severity_t severity, const char *msg) {
+	cb(ctx, severity, msg);
+}
 #endif
 */
 import "C"
@@ -59,17 +81,48 @@ func coraza_new_waf_config() C.coraza_waf_config_t {
 }
 
 //export coraza_add_rules_to_waf_config
-func coraza_add_rules_to_waf_config(c C.coraza_waf_config_t, rules *C.char) C.int {
+func coraza_add_rules_to_waf_config(c C.coraza_waf_config_t, rules *C.char) {
 	handle := ptrToWafConfigHandle(c)
 	handle.config = handle.config.WithDirectives(C.GoString(rules))
-	return 0
 }
 
 //export coraza_add_rules_from_file_to_waf_config
-func coraza_add_rules_from_file_to_waf_config(c C.coraza_waf_config_t, file *C.char) C.int {
+func coraza_add_rules_from_file_to_waf_config(c C.coraza_waf_config_t, file *C.char) {
 	handle := ptrToWafConfigHandle(c)
 	handle.config = handle.config.WithDirectivesFromFile(C.GoString(file))
-	return 0
+}
+
+//export coraza_add_log_callback_to_waf_config
+func coraza_add_log_callback_to_waf_config(c C.coraza_waf_config_t, cb C.coraza_log_cb, userData *C.void) {
+	handle := ptrToWafConfigHandle(c)
+	handle.config = handle.config.WithDebugLogger(newLogger(userData, cb))
+}
+
+//export coraza_add_error_callback_to_waf_config
+func coraza_add_error_callback_to_waf_config(c C.coraza_waf_config_t, cb C.coraza_error_cb, userData *C.void) {
+	handle := ptrToWafConfigHandle(c)
+	handle.config = handle.config.WithErrorCallback(func(rule types.MatchedRule) {
+		severity := C.CORAZA_SEVERITY_DEBUG
+		switch rule.Rule().Severity() {
+		case types.RuleSeverityEmergency:
+			severity = C.CORAZA_SEVERITY_EMERGENCY
+		case types.RuleSeverityAlert:
+			severity = C.CORAZA_SEVERITY_ALERT
+		case types.RuleSeverityCritical:
+			severity = C.CORAZA_SEVERITY_CRITICAL
+		case types.RuleSeverityError:
+			severity = C.CORAZA_SEVERITY_ERROR
+		case types.RuleSeverityWarning:
+			severity = C.CORAZA_SEVERITY_WARNING
+		case types.RuleSeverityNotice:
+			severity = C.CORAZA_SEVERITY_NOTICE
+		case types.RuleSeverityInfo:
+			severity = C.CORAZA_SEVERITY_INFO
+		case types.RuleSeverityDebug:
+			severity = C.CORAZA_SEVERITY_DEBUG
+		}
+		C.call_error_cb(cb, unsafe.Pointer(userData), C.coraza_severity_t(severity), C.CString(rule.Message()))
+	})
 }
 
 //export coraza_free_waf_config

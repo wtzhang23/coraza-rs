@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{pin::Pin, str::FromStr, sync::Arc};
 
 use coraza_sys::*;
 use cstr_argument::CStrArgument;
@@ -6,6 +6,10 @@ use strum::{AsRefStr, Display, EnumString, IntoStaticStr};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[cfg_attr(feature = "serde", serde(tag = "type"))]
+#[cfg_attr(feature = "serde", serde(content = "value"))]
 pub enum Error {
     #[error("Processing failed")]
     ProcessingFailed,
@@ -15,15 +19,167 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Display,
+    EnumString,
+    AsRefStr,
+    IntoStaticStr,
+)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl From<coraza_log_level_t> for LogLevel {
+    fn from(level: coraza_log_level_t) -> Self {
+        match level {
+            coraza_log_level_t::CORAZA_LOG_LEVEL_TRACE => LogLevel::Trace,
+            coraza_log_level_t::CORAZA_LOG_LEVEL_DEBUG => LogLevel::Debug,
+            coraza_log_level_t::CORAZA_LOG_LEVEL_INFO => LogLevel::Info,
+            coraza_log_level_t::CORAZA_LOG_LEVEL_WARN => LogLevel::Warn,
+            coraza_log_level_t::CORAZA_LOG_LEVEL_ERROR => LogLevel::Error,
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Display,
+    EnumString,
+    AsRefStr,
+    IntoStaticStr,
+)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum Severity {
+    Debug,
+    Info,
+    Notice,
+    Warning,
+    Error,
+    Critical,
+    Alert,
+    Emergency,
+}
+
+impl From<coraza_severity_t> for Severity {
+    fn from(severity: coraza_severity_t) -> Self {
+        match severity {
+            coraza_severity_t::CORAZA_SEVERITY_EMERGENCY => Severity::Emergency,
+            coraza_severity_t::CORAZA_SEVERITY_ALERT => Severity::Alert,
+            coraza_severity_t::CORAZA_SEVERITY_CRITICAL => Severity::Critical,
+            coraza_severity_t::CORAZA_SEVERITY_ERROR => Severity::Error,
+            coraza_severity_t::CORAZA_SEVERITY_WARNING => Severity::Warning,
+            coraza_severity_t::CORAZA_SEVERITY_NOTICE => Severity::Notice,
+            coraza_severity_t::CORAZA_SEVERITY_INFO => Severity::Info,
+            coraza_severity_t::CORAZA_SEVERITY_DEBUG => Severity::Debug,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct WafConfig {
     inner: coraza_waf_config_t,
+    added_raw_log_callback: bool,
+    added_raw_error_callback: bool,
+    callback_context: Option<Pin<Box<WafCallbackContext>>>,
+}
+
+type LogCallback = Box<dyn Fn(LogLevel, String, String) + Send + Sync>;
+type ErrorCallback = Box<dyn Fn(Severity, String) + Send + Sync>;
+
+pub struct WafCallbackContext {
+    log_callback: Option<LogCallback>,
+    error_callback: Option<ErrorCallback>,
 }
 
 impl WafConfig {
     pub fn new() -> Self {
         Self {
             inner: unsafe { coraza_new_waf_config() },
+            added_raw_log_callback: false,
+            added_raw_error_callback: false,
+            callback_context: None,
+        }
+    }
+
+    pub fn add_log_callback<F: Fn(LogLevel, String, String) + Send + Sync + 'static>(
+        &mut self,
+        callback: F,
+    ) {
+        let context = self.callback_context.get_or_insert_with(|| {
+            Box::pin(WafCallbackContext {
+                log_callback: None,
+                error_callback: None,
+            })
+        });
+        context.log_callback = Some(Box::new(callback));
+        if !self.added_raw_log_callback {
+            unsafe {
+                coraza_add_log_callback_to_waf_config(
+                    self.inner,
+                    Some(log_callback),
+                    std::ptr::null_mut(),
+                );
+            }
+            self.added_raw_log_callback = true;
+        }
+        unsafe {
+            coraza_add_log_callback_to_waf_config(
+                self.inner,
+                Some(log_callback),
+                context.as_ref().get_ref() as *const _ as *mut _,
+            );
+        }
+    }
+
+    pub fn add_error_callback<F: Fn(Severity, String) + Send + Sync + 'static>(
+        &mut self,
+        callback: F,
+    ) {
+        let context = self.callback_context.get_or_insert_with(|| {
+            Box::pin(WafCallbackContext {
+                log_callback: None,
+                error_callback: None,
+            })
+        });
+        context.error_callback = Some(Box::new(callback));
+        if !self.added_raw_error_callback {
+            unsafe {
+                coraza_add_error_callback_to_waf_config(
+                    self.inner,
+                    Some(error_callback),
+                    std::ptr::null_mut(),
+                );
+            }
+            self.added_raw_error_callback = true;
+        }
+        unsafe {
+            coraza_add_error_callback_to_waf_config(
+                self.inner,
+                Some(error_callback),
+                context.as_ref().get_ref() as *const _ as *mut _,
+            );
         }
     }
 
@@ -66,9 +222,29 @@ impl Drop for WafConfig {
     }
 }
 
+impl std::fmt::Debug for WafCallbackContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "WafCallbackContext {{ log_callback: {}, error_callback: {} }}",
+            match &self.log_callback {
+                Some(_) => "Some(<callback>)",
+                None => "None",
+            },
+            match &self.error_callback {
+                Some(_) => "Some(<callback>)",
+                None => "None",
+            },
+        )
+    }
+}
+
 #[derive(Debug)]
 pub struct Waf {
     inner: coraza_waf_t,
+
+    // keep a reference to the config to ensure it doesn't get freed while the WAF is alive
+    _config: Arc<WafConfig>,
 }
 
 impl Waf {
@@ -83,7 +259,7 @@ impl Waf {
     /// # Thread Safety
     ///
     /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
-    pub fn new(config: &WafConfig) -> Result<Self> {
+    pub fn new(config: Arc<WafConfig>) -> Result<Self> {
         let mut raw_err: coraza_error_t = std::ptr::null_mut();
         let inner = unsafe { coraza_new_waf(config.inner, &mut raw_err as *mut _) };
         if inner == 0 {
@@ -95,7 +271,10 @@ impl Waf {
             };
             return Err(Error::FailedToCreateWaf(err));
         }
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            _config: config,
+        })
     }
 
     /// Create a new transaction.
@@ -538,8 +717,50 @@ impl Drop for Intervention {
     }
 }
 
+extern "C" fn log_callback(
+    ctx: *mut std::ffi::c_void,
+    level: coraza_log_level_t,
+    msg: *const std::ffi::c_char,
+    fields: *const std::ffi::c_char,
+) {
+    let context = unsafe {
+        (ctx as *mut WafCallbackContext)
+            .as_mut()
+            .expect("Failed to get context")
+    };
+    (context.log_callback.as_ref().unwrap())(
+        level.into(),
+        unsafe { std::ffi::CStr::from_ptr(msg) }
+            .to_string_lossy()
+            .to_string(),
+        unsafe { std::ffi::CStr::from_ptr(fields) }
+            .to_string_lossy()
+            .to_string(),
+    );
+}
+
+extern "C" fn error_callback(
+    ctx: *mut std::ffi::c_void,
+    severity: coraza_severity_t,
+    msg: *const std::ffi::c_char,
+) {
+    let context = unsafe {
+        (ctx as *mut WafCallbackContext)
+            .as_mut()
+            .expect("Failed to get context")
+    };
+    (context.error_callback.as_ref().unwrap())(
+        severity.into(),
+        unsafe { std::ffi::CStr::from_ptr(msg) }
+            .to_string_lossy()
+            .to_string(),
+    );
+}
+
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
 
     #[test]
@@ -549,7 +770,14 @@ mod tests {
         config.add_rules(
             "SecRule REMOTE_ADDR \"127.0.0.1\" \"id:1,phase:1,deny,log,msg:'test 123',status:403\"",
         );
-        let waf = Waf::new(&config).expect("Failed to create WAF");
+        config.add_log_callback(|level, msg, fields| {
+            println!("log: level={}, msg={}, fields={}", level, msg, fields);
+        });
+        config.add_error_callback(|severity, msg| {
+            println!("error: severity={}, msg={}", severity, msg);
+        });
+        let config = Arc::new(config);
+        let waf = Waf::new(config).expect("Failed to create WAF");
         let mut tx = waf.new_transaction().unwrap();
         tx.process_connection("127.0.0.1", 55555, "127.0.0.1", 80)
             .unwrap();
@@ -569,12 +797,37 @@ mod tests {
     }
 
     #[test]
+    fn error_callback() {
+        let mut config = WafConfig::new();
+        config.add_rules(
+            "SecRule REMOTE_ADDR \"127.0.0.1\" \"id:1,phase:1,deny,log,msg:'test 123',status:403\"",
+        );
+        let callback_value: Arc<Mutex<Vec<(Severity, String)>>> = Arc::new(Mutex::new(Vec::new()));
+        let cv = callback_value.clone();
+        config.add_error_callback(move |severity, msg| {
+            cv.lock().unwrap().push((severity, msg));
+        });
+        let config = Arc::new(config);
+        let waf = Waf::new(config).expect("Failed to create WAF");
+        let mut tx = waf.new_transaction().unwrap();
+        tx.process_connection("127.0.0.1", 55555, "127.0.0.1", 80)
+            .unwrap();
+        tx.process_uri("/someurl", "GET", "HTTP/1.1").unwrap();
+        tx.process_request_headers().unwrap();
+        assert_eq!(
+            callback_value.lock().unwrap().as_slice(),
+            vec![(Severity::Emergency, "test 123".to_string())]
+        );
+    }
+
+    #[test]
     fn invalid_rule() {
         let mut config = WafConfig::new();
         config.add_rules("foobar");
-        let result = Waf::new(&config);
+        let config = Arc::new(config);
+        let result = Waf::new(config);
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.expect_err("Expected error");
         match err {
             Error::FailedToCreateWaf(e) => {
                 println!("{}", e);
