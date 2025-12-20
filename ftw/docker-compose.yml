@@ -64,11 +64,11 @@ services:
       - coraza-logs
     build: .
     environment:
-      - FTW_CLOUDMODE
-      - FTW_INCLUDE
+      - FTW_ARGS
     volumes:
       - logs:/home/envoy/logs:ro
       - build:/build
+      - .:/workspace-output:rw
   ftw-memstats:
     depends_on:
       - ftw

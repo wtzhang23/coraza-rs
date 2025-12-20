@@ -18,6 +18,7 @@ RUN cd /tmp && tar -xf coreruleset.tar.gz && \
 
 COPY ftw.yml /workspace/ftw.yml
 COPY tests.sh /workspace/tests.sh
+RUN chmod +x /workspace/tests.sh
 
 ENTRYPOINT ["sh"]
 CMD ["-c", "/workspace/tests.sh"]

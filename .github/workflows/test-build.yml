@@ -133,17 +133,11 @@ jobs:
         working-directory: ftw
         id: ftw-tests
         continue-on-error: true
+        env:
+          FTW_ARGS: --output github --show-failures-only
         run: |
           docker compose build --pull
-          docker compose run --rm ftw 2>&1 | tee ftw-output.log || true
-
-      - name: Upload FTW test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ftw-test-results
-          path: ftw/ftw-output.log
-          retention-days: 30
+          docker compose run --rm -e FTW_ARGS="--output github --show-failures-only" ftw
 
   examples:
     runs-on: ubuntu-latest

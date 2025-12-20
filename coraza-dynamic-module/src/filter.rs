@@ -484,16 +484,6 @@ impl CorazaFilter {
                     }
                 });
 
-            for (k, v) in path_opt
-                .and_then(|s| s.split_once('?'))
-                .map(|(_, query)| url::form_urlencoded::parse(query.as_bytes()))
-                .into_iter()
-                .flatten()
-            {
-                tx.add_get_request_argument(k.as_ref(), v.as_ref())
-                    .context(format!("Failed to add GET argument: {}={}", k, v))?;
-            }
-
             let request_protocol = envoy_filter
                 .get_attribute_string(abi::envoy_dynamic_module_type_attribute_id::RequestProtocol)
                 .context("Missing RequestProtocol attribute")?;
@@ -504,6 +494,8 @@ impl CorazaFilter {
 
             *proto = Some(request_protocol.to_string());
 
+            // ProcessURI automatically parses query string parameters from the URI
+            // No need to manually parse and add GET arguments (coraza-proxy-wasm doesn't do this either)
             tx.process_uri(
                 path_opt.unwrap_or(""),
                 request_method_opt.unwrap_or(""),

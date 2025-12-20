@@ -34,8 +34,9 @@ fi
 echo -e "\n[Ok] Got status code $status_code, expected 200. Ready to start."
 
 
-FTW_CLOUDMODE=${FTW_CLOUDMODE:-false}
+# Allow users to pass FTW flags via FTW_ARGS environment variable
+# Example: FTW_ARGS="--output github --show-failures-only --cloud false -i 941100"
+FTW_ARGS=${FTW_ARGS:-""}
 
-FTW_INCLUDE=$([ "${FTW_INCLUDE}" == "" ] && echo "" || echo "-i ${FTW_INCLUDE}")
-
-/ftw run -d coreruleset/tests/regression/tests --config ftw.yml --read-timeout=30s --cloud=$FTW_CLOUDMODE $FTW_INCLUDE
+# Run FTW tests with configured flags
+/ftw run -d coreruleset/tests/regression/tests --config ftw.yml --read-timeout=30s $FTW_ARGS
