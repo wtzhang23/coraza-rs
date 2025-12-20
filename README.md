@@ -1,6 +1,6 @@
 # coraza-rs
 
-![FTW Tests](https://img.shields.io/endpoint?url=https://wtzhang23.github.io/coraza-rs/ftw-success-rate.json)
+![FTW Tests](https://img.shields.io/endpoint?url=https://wtzhang23.github.io/coraza-rs/ftw/ftw-success-rate.json)
 
 Rust bindings and Envoy dynamic module for [libcoraza](https://github.com/corazawaf/libcoraza).
 
