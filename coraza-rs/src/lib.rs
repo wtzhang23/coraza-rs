@@ -433,6 +433,28 @@ impl Transaction {
         Ok(())
     }
 
+    /// Set the server name.
+    ///
+    /// # Arguments
+    ///
+    /// * `server_name` - The server name to set.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - If the server name was set successfully.
+    /// * `Err(Error::ProcessingFailed)` - If the server name was not set successfully. This in practice
+    ///   won't happen, but is included for completeness.
+    pub fn set_server_name(&mut self, server_name: &str) -> Result<()> {
+        let server_name_len = server_name.len();
+        let rv = unsafe {
+            coraza_set_server_name(self.inner, server_name.as_ptr() as *mut _, server_name_len)
+        };
+        if rv != 0 {
+            return Err(Error::ProcessingFailed);
+        }
+        Ok(())
+    }
+
     /// Add a request header.
     ///
     /// # Arguments
