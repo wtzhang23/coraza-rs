@@ -96,51 +96,92 @@ module.exports = async ({ github, context, core }) => {
     [forcedFail.length ? 'addList' : 'addRaw'](forcedFail.length ? forcedFail : 'None')
   core.summary.write();
 
-  let comment = '## 🧪 FTW Test Results\n\n';
-  const logsUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-  const commitUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${context.sha}`;
-  comment += `<sub><i>This was run for the commit [${context.sha}](${commitUrl}). See the [workflow logs](${logsUrl}) for details.</i></sub>\n\n`;
-  comment += createMarkdownTable(tableRows) + '\n\n';
+  // Only post PR comments if this is a pull request
+  if (context.issue && context.issue.number) {
+    let comment = '## 🧪 FTW Test Results\n\n';
+    const logsUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+    const commitUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${context.sha}`;
+    comment += `<sub><i>This was run for the commit [${context.sha}](${commitUrl}). See the [workflow logs](${logsUrl}) for details.</i></sub>\n\n`;
+    comment += createMarkdownTable(tableRows) + '\n\n';
 
-  if (failed.length > 0) {
-    comment += `### ❌ Failed Tests\n\n`;
-    
-    failed.slice(0, 5).forEach(testId => {
-      comment += `- \`${testId}\`\n`;
-    });
-    if (failed.length > 5) {
-      comment += `- _and ${failed.length - 5} more..._\n`;
+    if (failed.length > 0) {
+      comment += `### ❌ Failed Tests\n\n`;
+      
+      failed.slice(0, 5).forEach(testId => {
+        comment += `- \`${testId}\`\n`;
+      });
+      if (failed.length > 5) {
+        comment += `- _and ${failed.length - 5} more..._\n`;
+      }
+      comment += '\n';
     }
-    comment += '\n';
-  }
 
-  // Find existing comment
-  const { data: comments } = await github.rest.issues.listComments({
-    owner: context.repo.owner,
-    repo: context.repo.repo,
-    issue_number: context.issue.number,
-  });
-
-  const botComment = comments.find(comment => 
-    comment.user.type === 'Bot' && 
-    comment.body.includes('🧪 FTW Test Results')
-  );
-
-  if (botComment) {
-    console.log('Updating existing comment');
-    await github.rest.issues.updateComment({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
-      comment_id: botComment.id,
-      body: comment
-    });
-  } else {
-    console.log('Creating new comment');
-    await github.rest.issues.createComment({
+    // Find existing comment
+    const { data: comments } = await github.rest.issues.listComments({
       owner: context.repo.owner,
       repo: context.repo.repo,
       issue_number: context.issue.number,
-      body: comment
     });
+
+    const botComment = comments.find(comment => 
+      comment.user.type === 'Bot' && 
+      comment.body.includes('🧪 FTW Test Results')
+    );
+
+    if (botComment) {
+      console.log('Updating existing comment');
+      await github.rest.issues.updateComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        comment_id: botComment.id,
+        body: comment
+      });
+    } else {
+      console.log('Creating new comment');
+      await github.rest.issues.createComment({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        issue_number: context.issue.number,
+        body: comment
+      });
+    }
+  } else {
+    console.log('Not a pull request, skipping PR comment');
   }
+
+  // Generate shields.io JSON format for GitHub Pages
+  // Calculate success rate: (succeeded + forcedPass) / (total - skipped - ignored) * 100
+  const passedCount = succeeded.length + forcedPass.length;
+  const totalRelevant = total - skipped.length - ignored.length;
+  const successRate = totalRelevant > 0 ? Math.round((passedCount / totalRelevant) * 100) : 0;
+  
+  // Determine color based on success rate
+  let color = 'red';
+  if (successRate >= 90) {
+    color = 'brightgreen';
+  } else if (successRate >= 75) {
+    color = 'green';
+  } else if (successRate >= 50) {
+    color = 'yellow';
+  } else if (successRate >= 25) {
+    color = 'orange';
+  }
+
+  const shieldsJson = {
+    schemaVersion: 1,
+    label: 'FTW Tests',
+    message: `${successRate}%`,
+    color: color
+  };
+
+  // Write shields.io JSON to a directory for GitHub Pages
+  const pagesDir = path.join(process.cwd(), 'gh-pages');
+  if (!fs.existsSync(pagesDir)) {
+    fs.mkdirSync(pagesDir, { recursive: true });
+  }
+  
+  const shieldsJsonPath = path.join(pagesDir, 'ftw-success-rate.json');
+  fs.writeFileSync(shieldsJsonPath, JSON.stringify(shieldsJson, null, 2));
+  console.log(`Generated shields.io JSON at: ${shieldsJsonPath}`);
+  console.log(`Success rate: ${successRate}% (${passedCount}/${totalRelevant} passed)`);
 };
