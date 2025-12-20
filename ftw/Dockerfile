@@ -4,16 +4,16 @@
 
 FROM ghcr.io/coreruleset/go-ftw:1.3.0
 
-RUN apk update && apk add curl coreutils
+RUN apk update && apk add curl
 
 WORKDIR /workspace
 
-ARG CRS_VERSION=v4.14.0
+ARG CRS_VERSION=v4.21.0
 
 # Download CRS tests only (rules and configs are embedded in coraza via rootfs)
-ADD https://github.com/coreruleset/coreruleset/archive/refs/tags/${CRS_VERSION}.tar.gz /tmp/coreruleset.tar.gz
+ADD https://github.com/corazawaf/coraza-coreruleset/archive/refs/tags/${CRS_VERSION}.tar.gz /tmp/coreruleset.tar.gz
 RUN cd /tmp && tar -xf coreruleset.tar.gz && \
-    mv coreruleset-* /workspace/coreruleset && \
+    mv coraza-coreruleset-* /workspace/coreruleset && \
     rm -f coreruleset.tar.gz
 
 COPY ftw.yml /workspace/ftw.yml
