@@ -112,6 +112,9 @@ jobs:
   ftw:
     runs-on: ubuntu-latest
     needs: build-image
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -139,34 +142,17 @@ jobs:
         run: |
           docker compose build --pull
           # Use -T to disable TTY allocation and ensure unbuffered output
-          # Redirect stderr to stdout and save JSON output
-          docker compose run --rm -T -e FTW_ARGS="$FTW_ARGS" -e GITHUB_ACTIONS=true ftw 2>&1 | tee ftw-output.log
-
-      - name: Parse FTW results
-        if: always()
-        working-directory: ftw
-        id: parse-results
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq
-          if [ -f ftw-output.log ]; then
-            # Extract JSON from output (may have other lines before/after)
-            JSON_DATA=$(grep -E '^\s*\{' ftw-output.log | tail -1 || grep -E '\{' ftw-output.log | tail -1 || echo "{}")
-            
-            # Parse JSON using jq
-            TOTAL=$(echo "$JSON_DATA" | jq -r '.total // 0' || echo "0")
-            PASSED=$(echo "$JSON_DATA" | jq -r '.passed // 0' || echo "0")
-            FAILED=$(echo "$JSON_DATA" | jq -r '.failed // 0' || echo "0")
-            SKIPPED=$(echo "$JSON_DATA" | jq -r '.skipped // 0' || echo "0")
-            
-            # Set output variables for PR comment
-            echo "total=$TOTAL" >> $GITHUB_OUTPUT
-            echo "passed=$PASSED" >> $GITHUB_OUTPUT
-            echo "failed=$FAILED" >> $GITHUB_OUTPUT
-            echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
-          fi
+          # Use FTW_OUTPUT_PATH to isolate JSON output from other logs
+          # The workspace-output volume is mounted at /workspace-output in the container
+          docker compose run --rm -T \
+            -e FTW_ARGS="$FTW_ARGS" \
+            -e GITHUB_ACTIONS=true \
+            -e FTW_OUTPUT_PATH=/workspace-output/ftw-results.json \
+            ftw
 
       - name: Comment on PR
         if: github.event_name == 'pull_request' && always()
+        working-directory: ftw
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -174,10 +160,39 @@ jobs:
             const fs = require('fs');
             const path = require('path');
             
-            const total = '${{ steps.parse-results.outputs.total || 0 }}';
-            const passed = '${{ steps.parse-results.outputs.passed || 0 }}';
-            const failed = '${{ steps.parse-results.outputs.failed || 0 }}';
-            const skipped = '${{ steps.parse-results.outputs.skipped || 0 }}';
+            // Parse JSON file directly
+            let total = 0;
+            let passed = 0;
+            let failed = 0;
+            let skipped = 0;
+            let failedTestList = [];
+            let totalFailedCount = 0;
+            
+            try {
+              const jsonPath = path.join(process.cwd(), 'ftw-results.json');
+              if (fs.existsSync(jsonPath)) {
+                const content = fs.readFileSync(jsonPath, 'utf8');
+                const jsonData = JSON.parse(content);
+                
+                total = jsonData.total || 0;
+                passed = jsonData.passed || 0;
+                failed = jsonData.failed || 0;
+                skipped = jsonData.skipped || 0;
+                
+                // Extract failed test IDs
+                if (jsonData.tests && Array.isArray(jsonData.tests)) {
+                  const allFailed = jsonData.tests
+                    .filter(t => t.result === 'failed' || t.status === 'failed')
+                    .map(t => t.test_id)
+                    .filter(id => id);
+                  totalFailedCount = allFailed.length;
+                  failedTestList = allFailed.slice(0, 5);
+                }
+              }
+            } catch (e) {
+              // If parsing fails, use defaults (all zeros)
+              console.log('Error parsing FTW results:', e.message);
+            }
             
             // Helper function to create markdown table
             const createTable = (rows) => {
@@ -193,41 +208,16 @@ jobs:
             // Create table
             const table = createTable([
               ['Status', 'Count'],
-              ['✅ Passed', passed],
-              ['❌ Failed', failed],
-              ['⏭️  Skipped', skipped],
-              ['📊 Total', total]
+              ['✅ Passed', String(passed)],
+              ['❌ Failed', String(failed)],
+              ['⏭️  Skipped', String(skipped)],
+              ['📊 Total', String(total)]
             ]);
             
             let comment = '## 🧪 FTW Test Results\n\n';
             comment += table + '\n\n';
             
-            if (parseInt(failed) > 0) {
-              // Parse failed tests from the JSON file
-              let failedTestList = [];
-              let totalFailedCount = 0;
-              
-              try {
-                const jsonPath = path.join(process.env.GITHUB_WORKSPACE, 'ftw', 'ftw-output.log');
-                if (fs.existsSync(jsonPath)) {
-                  const content = fs.readFileSync(jsonPath, 'utf8');
-                  const jsonMatch = content.match(/\{[\s\S]*\}/);
-                  if (jsonMatch) {
-                    const jsonData = JSON.parse(jsonMatch[0]);
-                    if (jsonData.tests && Array.isArray(jsonData.tests)) {
-                      const allFailed = jsonData.tests
-                        .filter(t => t.result === 'failed' || t.status === 'failed')
-                        .map(t => t.test_id)
-                        .filter(id => id);
-                      totalFailedCount = allFailed.length;
-                      failedTestList = allFailed.slice(0, 5);
-                    }
-                  }
-                }
-              } catch (e) {
-                // If parsing fails, continue without test list
-              }
-              
+            if (failed > 0) {
               comment += `### ❌ Failed Tests\n\n`;
               
               if (failedTestList.length > 0) {
