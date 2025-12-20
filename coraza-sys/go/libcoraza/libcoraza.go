@@ -232,6 +232,13 @@ func coraza_process_uri(t C.coraza_transaction_t, uri *C.char, uri_len C.size_t,
 	return 0
 }
 
+//export coraza_set_server_name
+func coraza_set_server_name(t C.coraza_transaction_t, server_name *C.char, server_name_len C.size_t) C.int {
+	handle := ptrToTransactionHandle(t)
+	handle.tx.SetServerName(C.GoStringN(server_name, C.int(server_name_len)))
+	return 0
+}
+
 //export coraza_add_request_header
 func coraza_add_request_header(t C.coraza_transaction_t, name *C.char, name_len C.size_t, value *C.char, value_len C.size_t) C.int {
 	handle := ptrToTransactionHandle(t)

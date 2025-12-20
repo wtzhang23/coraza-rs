@@ -459,6 +459,13 @@ impl CorazaFilter {
                 .map(|s| s.as_slice().pipe(std::str::from_utf8))
                 .transpose()
                 .context("Failed to parse authority as UTF-8")?;
+            if let Some(authority) = authority_opt {
+                tx.set_server_name(authority)
+                    .context("Failed to set server name")?;
+                // CRS rules tend to expect Host even with HTTP/2, so we add it here.
+                tx.add_request_header(b"Host", authority.as_bytes())
+                    .context("Failed to add Host header crafted from :authority")?;
+            }
 
             let path_opt = envoy_filter.get_request_header_value(":path").or_else(|| {
                 envoy_filter
