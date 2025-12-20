@@ -79,11 +79,25 @@ module.exports = async ({ github, context, core }) => {
 
   // Write unsuccessful tests to workflow output
   core.summary.addHeading('FTW Test Results').addTable(tableRows).write();
-  core.summary.addHeading('Failed tests').addList(failed, true).write();
-  core.summary.addHeading('Skipped tests').addList(skipped, true).write();
-  core.summary.addHeading('Ignored tests').addList(ignored, true).write();
-  core.summary.addHeading('Forced pass tests').addList(forcedPass, true).write();
-  core.summary.addHeading('Forced fail tests').addList(forcedFail, true).write();
+  core.summary
+    .addHeading('Failed tests')
+    [failed.length ? 'addList' : 'addRaw'](failed.length ? failed : 'None', true).write()
+  core.summary
+    .addHeading('Skipped tests')
+    [skipped.length ? 'addList' : 'addRaw'](skipped.length ? skipped : 'None', true)
+    .write()
+  core.summary
+    .addHeading('Ignored tests')
+    [ignored.length ? 'addList' : 'addRaw'](ignored.length ? ignored : 'None', true)
+    .write()
+  core.summary
+    .addHeading('Forced pass tests')
+    [forcedPass.length ? 'addList' : 'addRaw'](forcedPass.length ? forcedPass : 'None', true)
+    .write()
+  core.summary
+    .addHeading('Forced fail tests')
+    [forcedFail.length ? 'addList' : 'addRaw'](forcedFail.length ? forcedFail : 'None', true)
+    .write();
 
   let comment = '## 🧪 FTW Test Results\n\n';
   const logsUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
