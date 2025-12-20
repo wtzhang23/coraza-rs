@@ -157,7 +157,9 @@ jobs:
           FTW_RESULTS_JSON_PATH: ftw/ftw-results.json
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          script-path: .github/scripts/comment-ftw-results.js
+          script: |
+            const script = require('./.github/scripts/comment-ftw-results.js');
+            await script({ github, context, core });
 
   examples:
     runs-on: ubuntu-latest
