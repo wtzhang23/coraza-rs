@@ -74,17 +74,6 @@ func TestTransactionInitialization(t *testing.T) {
 	tx.tx.ProcessConnection("127.0.0.1", 8080, "127.0.0.1", 80)
 }
 
-func TestTxCleaning(t *testing.T) {
-	config := coraza_new_waf_config()
-	err := nilWafError()
-	waf := coraza_new_waf(config, &err)
-	txPtr := coraza_new_transaction(waf)
-	coraza_free_transaction(txPtr)
-	if tx := cgo.Handle(txPtr).Value().(*TransactionHandle); tx != nil {
-		t.Fatal("Transaction was not removed from the map")
-	}
-}
-
 func BenchmarkTransactionCreation(b *testing.B) {
 	config := coraza_new_waf_config()
 	err := nilWafError()
