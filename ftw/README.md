@@ -44,8 +44,11 @@ Examples:
 # Run with default settings
 docker compose run --rm ftw
 
-# Run specific tests
-FTW_ARGS="-i 941100" docker compose run --rm ftw
+# Run specific tests (use test ID pattern, e.g., 911100 matches all tests in that file)
+FTW_ARGS="-i 911100" docker compose run --rm ftw
+
+# Run a specific test by ID (e.g., 911100-5)
+FTW_ARGS="-i 911100-5" docker compose run --rm ftw
 
 # Use GitHub Actions output format with failures only
 FTW_ARGS="--output github --show-failures-only" docker compose run --rm ftw
@@ -60,5 +63,5 @@ FTW_ARGS="--output quiet" docker compose run --rm ftw
 FTW_ARGS="--cloud true" docker compose run --rm ftw
 
 # Combine multiple flags
-FTW_ARGS="--output github --show-failures-only --cloud false -i 941100" docker compose run --rm ftw
+FTW_ARGS="--output github --show-failures-only --cloud false -i 911100" docker compose run --rm ftw
 ```

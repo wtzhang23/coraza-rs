@@ -4,7 +4,7 @@
 
 FROM ghcr.io/coreruleset/go-ftw:1.3.0
 
-RUN apk update && apk add curl
+RUN apk update && apk add curl coreutils
 
 WORKDIR /workspace
 

@@ -39,4 +39,11 @@ echo -e "\n[Ok] Got status code $status_code, expected 200. Ready to start."
 FTW_ARGS=${FTW_ARGS:-""}
 
 # Run FTW tests with configured flags
-/ftw run -d coreruleset/tests/regression/tests --config ftw.yml --read-timeout=30s $FTW_ARGS
+# Note: $FTW_ARGS is intentionally unquoted to allow word splitting
+# Use stdbuf to ensure unbuffered output for GitHub Actions annotations
+if command -v stdbuf >/dev/null 2>&1; then
+  stdbuf -oL -eL /ftw run -d coreruleset/tests/regression/tests --config ftw.yml --read-timeout=30s ${FTW_ARGS}
+else
+  # If stdbuf is not available, run directly (alpine images may not have it)
+  /ftw run -d coreruleset/tests/regression/tests --config ftw.yml --read-timeout=30s ${FTW_ARGS}
+fi
