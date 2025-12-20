@@ -54,14 +54,6 @@ module.exports = async ({ github, context, core }) => {
     console.log('Stack trace:', e.stack);
   }
 
-  // Write unsuccessful tests to workflow output
-  core.summary.addHeading('FTW Test Results').addRaw(table).write();
-  core.summary.addHeading('Failed tests').addRaw(failed.length > 0 ? failed.map(t => `- ${t}`).join('\n') : 'None').write();
-  core.summary.addHeading('Skipped tests').addRaw(skipped.length > 0 ? skipped.map(t => `- ${t}`).join('\n') : 'None').write();
-  core.summary.addHeading('Ignored tests').addRaw(ignored.length > 0 ? ignored.map(t => `- ${t}`).join('\n') : 'None').write();
-  core.summary.addHeading('Forced pass tests').addRaw(forcedPass.length > 0 ? forcedPass.map(t => `- ${t}`).join('\n') : 'None').write();
-  core.summary.addHeading('Forced fail tests').addRaw(forcedFail.length > 0 ? forcedFail.map(t => `- ${t}`).join('\n') : 'None').write();
-
   // Helper function to create markdown table
   const createTable = (rows) => {
     const [header, ...data] = rows;
@@ -84,6 +76,14 @@ module.exports = async ({ github, context, core }) => {
     ['❌ Forced Fail', String(forcedFail.length)],
     ['📊 Run', String(total)]
   ]);
+
+  // Write unsuccessful tests to workflow output
+  core.summary.addHeading('FTW Test Results').addRaw(table).write();
+  core.summary.addHeading('Failed tests').addRaw(failed.length > 0 ? failed.map(t => `- ${t}`).join('\n') : 'None').write();
+  core.summary.addHeading('Skipped tests').addRaw(skipped.length > 0 ? skipped.map(t => `- ${t}`).join('\n') : 'None').write();
+  core.summary.addHeading('Ignored tests').addRaw(ignored.length > 0 ? ignored.map(t => `- ${t}`).join('\n') : 'None').write();
+  core.summary.addHeading('Forced pass tests').addRaw(forcedPass.length > 0 ? forcedPass.map(t => `- ${t}`).join('\n') : 'None').write();
+  core.summary.addHeading('Forced fail tests').addRaw(forcedFail.length > 0 ? forcedFail.map(t => `- ${t}`).join('\n') : 'None').write();
 
   let comment = '## 🧪 FTW Test Results\n\n';
   comment += table + '\n\n';
