@@ -147,7 +147,7 @@ jobs:
           docker compose run --rm -T \
             ftw
 
-      - name: Comment on PR and Dump Results
+      - name: Output Results
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@v7
         env:
