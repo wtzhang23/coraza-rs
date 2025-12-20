@@ -115,6 +115,7 @@ module.exports = async ({ github, context, core }) => {
   );
 
   if (botComment) {
+    console.log('Updating existing comment');
     await github.rest.issues.updateComment({
       owner: context.repo.owner,
       repo: context.repo.repo,
@@ -122,6 +123,7 @@ module.exports = async ({ github, context, core }) => {
       body: comment
     });
   } else {
+    console.log('Creating new comment');
     await github.rest.issues.createComment({
       owner: context.repo.owner,
       repo: context.repo.repo,
