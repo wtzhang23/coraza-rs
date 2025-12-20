@@ -65,6 +65,7 @@ services:
     build: .
     environment:
       - FTW_ARGS
+      - FTW_OUTPUT_PATH
     volumes:
       - ./logs:/home/envoy/logs:ro
       - build:/build

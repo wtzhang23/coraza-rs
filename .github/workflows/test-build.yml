@@ -138,17 +138,16 @@ jobs:
         continue-on-error: true
         env:
           FTW_ARGS: --output json --show-failures-only
-          GITHUB_ACTIONS: true
+          FTW_OUTPUT_PATH: /workspace-output/ftw-results.json
         run: |
           docker compose build --pull
           # Use -T to disable TTY allocation and ensure unbuffered output
           # Use FTW_OUTPUT_PATH to isolate JSON output from other logs
           # The workspace-output volume is mounted at /workspace-output in the container
           docker compose run --rm -T \
-            -e FTW_ARGS="$FTW_ARGS" \
-            -e GITHUB_ACTIONS=true \
-            -e FTW_OUTPUT_PATH=/workspace-output/ftw-results.json \
             ftw
+
+          cat /workspace-output/ftw-results.json
 
       - name: Comment on PR
         if: github.event_name == 'pull_request' && always()

@@ -47,10 +47,11 @@ FTW_OUTPUT_PATH=${FTW_OUTPUT_PATH:-""}
 # coraza-coreruleset has tests in coreruleset/tests
 if [ -n "$FTW_OUTPUT_PATH" ]; then
   # Output FTW results to the specified path (isolated from other logs)
-  /ftw run -d coreruleset/tests --config ftw.yml --read-timeout=30s ${FTW_ARGS} > "$FTW_OUTPUT_PATH" 2>&1
+  # Only redirect stdout to preserve JSON; stderr goes to stderr (visible in logs)
+  /ftw run -d coreruleset/tests --config ftw.yml --read-timeout=30s ${FTW_ARGS} > "$FTW_OUTPUT_PATH"
   FTW_EXIT_CODE=$?
   # Also output to stdout for visibility (but JSON will be in the file)
-  cat "$FTW_OUTPUT_PATH"
+  echo "FTW results saved to $FTW_OUTPUT_PATH"
   exit $FTW_EXIT_CODE
 else
   # Run normally, output to stdout/stderr
