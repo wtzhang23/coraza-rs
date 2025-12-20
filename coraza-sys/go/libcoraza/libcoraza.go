@@ -58,16 +58,12 @@ import "C"
 import (
 	"io"
 	"os"
-	"sync"
+	"runtime/cgo"
 	"unsafe"
 
 	"github.com/corazawaf/coraza/v3"
 	"github.com/corazawaf/coraza/v3/types"
 )
-
-var configMap = sync.Map{}
-var wafMap = sync.Map{}
-var txMap = sync.Map{}
 
 type WafConfigHandle struct {
 	config coraza.WAFConfig
@@ -87,30 +83,30 @@ func coraza_new_waf_config() C.coraza_waf_config_t {
 	handle := &WafConfigHandle{
 		config: config,
 	}
-	return configMapInsert(handle)
+	return C.coraza_waf_config_t(cgo.NewHandle(handle))
 }
 
 //export coraza_add_rules_to_waf_config
 func coraza_add_rules_to_waf_config(c C.coraza_waf_config_t, rules *C.char, rules_len C.size_t) {
-	handle := ptrToWafConfigHandle(c)
+	handle := cgo.Handle(c).Value().(*WafConfigHandle)
 	handle.config = handle.config.WithDirectives(C.GoStringN(rules, C.int(rules_len)))
 }
 
 //export coraza_add_rules_from_file_to_waf_config
 func coraza_add_rules_from_file_to_waf_config(c C.coraza_waf_config_t, file *C.char, file_len C.size_t) {
-	handle := ptrToWafConfigHandle(c)
+	handle := cgo.Handle(c).Value().(*WafConfigHandle)
 	handle.config = handle.config.WithDirectivesFromFile(C.GoStringN(file, C.int(file_len)))
 }
 
 //export coraza_add_log_callback_to_waf_config
 func coraza_add_log_callback_to_waf_config(c C.coraza_waf_config_t, cb C.coraza_log_cb, userData *C.void) {
-	handle := ptrToWafConfigHandle(c)
+	handle := cgo.Handle(c).Value().(*WafConfigHandle)
 	handle.config = handle.config.WithDebugLogger(newLogger(userData, cb))
 }
 
 //export coraza_add_error_callback_to_waf_config
 func coraza_add_error_callback_to_waf_config(c C.coraza_waf_config_t, cb C.coraza_error_cb, userData *C.void) {
-	handle := ptrToWafConfigHandle(c)
+	handle := cgo.Handle(c).Value().(*WafConfigHandle)
 	handle.config = handle.config.WithErrorCallback(func(rule types.MatchedRule) {
 		severity := C.CORAZA_SEVERITY_DEBUG
 		switch rule.Rule().Severity() {
@@ -137,7 +133,7 @@ func coraza_add_error_callback_to_waf_config(c C.coraza_waf_config_t, cb C.coraz
 
 //export coraza_free_waf_config
 func coraza_free_waf_config(c C.coraza_waf_config_t) C.int {
-	configMapDelete(c)
+	cgo.Handle(c).Delete()
 	return 0
 }
 
@@ -147,7 +143,7 @@ func coraza_free_waf_config(c C.coraza_waf_config_t) C.int {
  */
 //export coraza_new_waf
 func coraza_new_waf(c C.coraza_waf_config_t, er *C.coraza_error_t) C.coraza_waf_t {
-	wafConfigHandle := ptrToWafConfigHandle(c)
+	wafConfigHandle := cgo.Handle(c).Value().(*WafConfigHandle)
 	waf, err := coraza.NewWAF(wafConfigHandle.config)
 	if err != nil {
 		errMsg := err.Error()
@@ -161,7 +157,7 @@ func coraza_new_waf(c C.coraza_waf_config_t, er *C.coraza_error_t) C.coraza_waf_
 	handle := &WafHandle{
 		waf: waf,
 	}
-	return wafMapInsert(handle)
+	return C.coraza_waf_t(cgo.NewHandle(handle))
 }
 
 /**
@@ -171,27 +167,27 @@ func coraza_new_waf(c C.coraza_waf_config_t, er *C.coraza_error_t) C.coraza_waf_
  */
 //export coraza_new_transaction
 func coraza_new_transaction(waf C.coraza_waf_t) C.coraza_transaction_t {
-	handle := ptrToWafHandle(waf)
+	handle := cgo.Handle(waf).Value().(*WafHandle)
 	tx := handle.waf.NewTransaction()
 	if tx == nil {
 		return 0
 	}
-	return txMapInsert(&TransactionHandle{tx: tx})
+	return C.coraza_transaction_t(cgo.NewHandle(&TransactionHandle{tx: tx}))
 }
 
 //export coraza_new_transaction_with_id
 func coraza_new_transaction_with_id(waf C.coraza_waf_t, id *C.char, id_len C.size_t) C.coraza_transaction_t {
-	handle := ptrToWafHandle(waf)
+	handle := cgo.Handle(waf).Value().(*WafHandle)
 	tx := handle.waf.NewTransactionWithID(C.GoStringN(id, C.int(id_len)))
 	if tx == nil {
 		return 0
 	}
-	return txMapInsert(&TransactionHandle{tx: tx})
+	return C.coraza_transaction_t(cgo.NewHandle(&TransactionHandle{tx: tx}))
 }
 
 //export coraza_intervention
 func coraza_intervention(tx C.coraza_transaction_t) *C.coraza_intervention_t {
-	handle := ptrToTransactionHandle(tx)
+	handle := cgo.Handle(tx).Value().(*TransactionHandle)
 	if handle.tx.Interruption() == nil {
 		return nil
 	}
@@ -205,7 +201,7 @@ func coraza_intervention(tx C.coraza_transaction_t) *C.coraza_intervention_t {
 
 //export coraza_process_connection
 func coraza_process_connection(t C.coraza_transaction_t, sourceAddress *C.char, sourceAddress_len C.size_t, clientPort C.int, serverHost *C.char, serverHost_len C.size_t, serverPort C.int) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	srcAddr := C.GoStringN(sourceAddress, C.int(sourceAddress_len))
 	cp := int(clientPort)
 	ch := C.GoStringN(serverHost, C.int(serverHost_len))
@@ -216,7 +212,7 @@ func coraza_process_connection(t C.coraza_transaction_t, sourceAddress *C.char, 
 
 //export coraza_process_request_body
 func coraza_process_request_body(t C.coraza_transaction_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	if _, err := handle.tx.ProcessRequestBody(); err != nil {
 		return 1
 	}
@@ -227,42 +223,42 @@ func coraza_process_request_body(t C.coraza_transaction_t) C.int {
 //
 //export coraza_process_uri
 func coraza_process_uri(t C.coraza_transaction_t, uri *C.char, uri_len C.size_t, method *C.char, method_len C.size_t, proto *C.char, proto_len C.size_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	handle.tx.ProcessURI(C.GoStringN(uri, C.int(uri_len)), C.GoStringN(method, C.int(method_len)), C.GoStringN(proto, C.int(proto_len)))
 	return 0
 }
 
 //export coraza_set_server_name
 func coraza_set_server_name(t C.coraza_transaction_t, server_name *C.char, server_name_len C.size_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	handle.tx.SetServerName(C.GoStringN(server_name, C.int(server_name_len)))
 	return 0
 }
 
 //export coraza_add_request_header
 func coraza_add_request_header(t C.coraza_transaction_t, name *C.char, name_len C.size_t, value *C.char, value_len C.size_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	handle.tx.AddRequestHeader(C.GoStringN(name, C.int(name_len)), C.GoStringN(value, C.int(value_len)))
 	return 0
 }
 
 //export coraza_process_request_headers
 func coraza_process_request_headers(t C.coraza_transaction_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	handle.tx.ProcessRequestHeaders()
 	return 0
 }
 
 //export coraza_process_logging
 func coraza_process_logging(t C.coraza_transaction_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	handle.tx.ProcessLogging()
 	return 0
 }
 
 //export coraza_append_request_body
 func coraza_append_request_body(t C.coraza_transaction_t, data *C.uchar, length C.int) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	if _, _, err := handle.tx.WriteRequestBody(C.GoBytes(unsafe.Pointer(data), length)); err != nil {
 		return 1
 	}
@@ -271,21 +267,21 @@ func coraza_append_request_body(t C.coraza_transaction_t, data *C.uchar, length 
 
 //export coraza_add_get_args
 func coraza_add_get_args(t C.coraza_transaction_t, name *C.char, name_len C.size_t, value *C.char, value_len C.size_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	handle.tx.AddGetRequestArgument(C.GoStringN(name, C.int(name_len)), C.GoStringN(value, C.int(value_len)))
 	return 0
 }
 
 //export coraza_add_response_header
 func coraza_add_response_header(t C.coraza_transaction_t, name *C.char, name_len C.size_t, value *C.char, value_len C.size_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	handle.tx.AddResponseHeader(C.GoStringN(name, C.int(name_len)), C.GoStringN(value, C.int(value_len)))
 	return 0
 }
 
 //export coraza_append_response_body
 func coraza_append_response_body(t C.coraza_transaction_t, data *C.uchar, length C.int) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	if _, _, err := handle.tx.WriteResponseBody(C.GoBytes(unsafe.Pointer(data), length)); err != nil {
 		return 1
 	}
@@ -294,7 +290,7 @@ func coraza_append_response_body(t C.coraza_transaction_t, data *C.uchar, length
 
 //export coraza_process_response_body
 func coraza_process_response_body(t C.coraza_transaction_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	if _, err := handle.tx.ProcessResponseBody(); err != nil {
 		return 1
 	}
@@ -303,18 +299,18 @@ func coraza_process_response_body(t C.coraza_transaction_t) C.int {
 
 //export coraza_process_response_headers
 func coraza_process_response_headers(t C.coraza_transaction_t, status C.int, proto *C.char, proto_len C.size_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	handle.tx.ProcessResponseHeaders(int(status), C.GoStringN(proto, C.int(proto_len)))
 	return 0
 }
 
 //export coraza_free_transaction
 func coraza_free_transaction(t C.coraza_transaction_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	if handle.tx.Close() != nil {
 		return 1
 	}
-	txMapDelete(t)
+	cgo.Handle(t).Delete()
 	return 0
 }
 
@@ -335,7 +331,7 @@ func coraza_rules_merge(w1 C.coraza_waf_t, w2 C.coraza_waf_t, er **C.char) C.int
 
 //export coraza_request_body_from_file
 func coraza_request_body_from_file(t C.coraza_transaction_t, file *C.char, file_len C.size_t) C.int {
-	handle := ptrToTransactionHandle(t)
+	handle := cgo.Handle(t).Value().(*TransactionHandle)
 	f, err := os.Open(C.GoStringN(file, C.int(file_len)))
 	if err != nil {
 		return 1
@@ -360,7 +356,7 @@ func coraza_request_body_from_file(t C.coraza_transaction_t, file *C.char, file_
 
 //export coraza_free_waf
 func coraza_free_waf(t C.coraza_waf_t) C.int {
-	wafMapDelete(t)
+	cgo.Handle(t).Delete()
 	return 0
 }
 
@@ -379,78 +375,6 @@ func coraza_set_log_cb(waf C.coraza_waf_t, cb C.coraza_log_cb) {
 /*
 Internal helpers
 */
-
-func configMapInsert(handle *WafConfigHandle) C.coraza_waf_config_t {
-	ptr := wafConfigHandleToPtr(handle)
-	configMap.Store(ptr, handle)
-	return C.coraza_waf_config_t(ptr)
-}
-
-func configMapDelete(config C.coraza_waf_config_t) {
-	ptr := uintptr(config)
-	configMap.Delete(ptr)
-}
-
-func wafMapInsert(handle *WafHandle) C.coraza_waf_t {
-	ptr := wafToPtr(handle)
-	wafMap.Store(ptr, handle)
-	return C.coraza_waf_t(ptr)
-}
-
-func wafMapDelete(waf C.coraza_waf_t) {
-	ptr := uintptr(waf)
-	wafMap.Delete(ptr)
-}
-
-func txMapInsert(handle *TransactionHandle) C.coraza_transaction_t {
-	ptr := transactionHandleToPtr(handle)
-	txMap.Store(ptr, handle)
-	return C.coraza_transaction_t(ptr)
-}
-
-func txMapDelete(tx C.coraza_transaction_t) {
-	handle := uintptr(tx)
-	txMap.Delete(handle)
-}
-
-func ptrToWafConfigHandle(config C.coraza_waf_config_t) *WafConfigHandle {
-	ptr := uintptr(config)
-	handle, ok := configMap.Load(ptr)
-	if !ok {
-		return nil
-	}
-	return handle.(*WafConfigHandle)
-}
-
-func ptrToWafHandle(waf C.coraza_waf_t) *WafHandle {
-	ptr := uintptr(waf)
-	handle, ok := wafMap.Load(ptr)
-	if !ok {
-		return nil
-	}
-	return handle.(*WafHandle)
-}
-
-func ptrToTransactionHandle(t C.coraza_transaction_t) *TransactionHandle {
-	handleID := uintptr(t)
-	handle, ok := txMap.Load(handleID)
-	if !ok {
-		return nil
-	}
-	return handle.(*TransactionHandle)
-}
-
-func transactionHandleToPtr(handle *TransactionHandle) uintptr {
-	return uintptr(unsafe.Pointer(handle))
-}
-
-func wafToPtr(waf *WafHandle) uintptr {
-	return uintptr(unsafe.Pointer(waf))
-}
-
-func wafConfigHandleToPtr(config *WafConfigHandle) uintptr {
-	return uintptr(unsafe.Pointer(config))
-}
 
 // It should just be C.CString(s) but we need this to build tests
 func stringToC(s string) (*C.char, C.size_t) {
