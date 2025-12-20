@@ -38,7 +38,21 @@ echo -e "\n[Ok] Got status code $status_code, expected 200. Ready to start."
 # Example: FTW_ARGS="--output github --show-failures-only --cloud false -i 941100"
 FTW_ARGS=${FTW_ARGS:-""}
 
+# Allow users to specify a path for FTW output (useful for isolating JSON output)
+# If FTW_OUTPUT_PATH is set, redirect FTW output to that file
+FTW_OUTPUT_PATH=${FTW_OUTPUT_PATH:-""}
+
 # Run FTW tests with configured flags
 # Note: $FTW_ARGS is intentionally unquoted to allow word splitting
 # coraza-coreruleset has tests in coreruleset/tests
-/ftw run -d coreruleset/tests --config ftw.yml --read-timeout=30s ${FTW_ARGS}
+if [ -n "$FTW_OUTPUT_PATH" ]; then
+  # Output FTW results to the specified path (isolated from other logs)
+  /ftw run -d coreruleset/tests --config ftw.yml --read-timeout=30s ${FTW_ARGS} > "$FTW_OUTPUT_PATH" 2>&1
+  FTW_EXIT_CODE=$?
+  # Also output to stdout for visibility (but JSON will be in the file)
+  cat "$FTW_OUTPUT_PATH"
+  exit $FTW_EXIT_CODE
+else
+  # Run normally, output to stdout/stderr
+  /ftw run -d coreruleset/tests --config ftw.yml --read-timeout=30s ${FTW_ARGS}
+fi
