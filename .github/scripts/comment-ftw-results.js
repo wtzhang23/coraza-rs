@@ -44,12 +44,6 @@ module.exports = async ({ github, context, core }) => {
       jsonData['forced-pass'].sort();
       jsonData['forced-fail'].sort();
       
-      // Extract failed test IDs
-      if (Array.isArray(jsonData.failed)) {
-        totalFailedCount = jsonData.failed.length;
-        failedTestList = jsonData.failed.slice(0, 5);
-      }
-      
       console.log(`Parsed results: total=${total}, passed=${succeeded}, failed=${failed}, skipped=${skipped}, ignored=${ignored}, forced-pass=${forcedPass}, forced-fail=${forcedFail}`);
 
       // Log unsuccessful tests
@@ -96,12 +90,12 @@ module.exports = async ({ github, context, core }) => {
   if (failed > 0) {
     comment += `### ❌ Failed Tests\n\n`;
     
-    if (failedTestList.length > 0) {
-      failedTestList.forEach(testId => {
+    if (failed.length > 0) {
+      failed.slice(0, 5).forEach(testId => {
         comment += `- \`${testId}\`\n`;
       });
-      if (totalFailedCount > 5) {
-        comment += `- _and ${totalFailedCount - 5} more..._\n`;
+      if (failed.length > 5) {
+        comment += `- _and ${failed.length - 5} more..._\n`;
       }
       comment += '\n';
     }
