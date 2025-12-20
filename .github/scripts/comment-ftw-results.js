@@ -1,0 +1,107 @@
+const fs = require('fs');
+const path = require('path');
+
+// Get the JSON file path from environment variable, with fallback to default
+const jsonFilePath = process.env.FTW_RESULTS_JSON_PATH || path.join(process.cwd(), 'ftw-results.json');
+
+// Parse JSON file directly
+let total = 0;
+let passed = 0;
+let failed = 0;
+let skipped = 0;
+let failedTestList = [];
+let totalFailedCount = 0;
+
+try {
+  const jsonPath = path.isAbsolute(jsonFilePath) ? jsonFilePath : path.join(process.cwd(), jsonFilePath);
+  if (fs.existsSync(jsonPath)) {
+    const content = fs.readFileSync(jsonPath, 'utf8');
+    const jsonData = JSON.parse(content);
+    
+    total = jsonData.total || 0;
+    passed = jsonData.passed || 0;
+    failed = jsonData.failed || 0;
+    skipped = jsonData.skipped || 0;
+    
+    // Extract failed test IDs
+    if (jsonData.tests && Array.isArray(jsonData.tests)) {
+      const allFailed = jsonData.tests
+        .filter(t => t.result === 'failed' || t.status === 'failed')
+        .map(t => t.test_id)
+        .filter(id => id);
+      totalFailedCount = allFailed.length;
+      failedTestList = allFailed.slice(0, 5);
+    }
+  }
+} catch (e) {
+  // If parsing fails, use defaults (all zeros)
+  console.log('Error parsing FTW results:', e.message);
+}
+
+// Helper function to create markdown table
+const createTable = (rows) => {
+  const [header, ...data] = rows;
+  const separator = header.map(() => '---');
+  return [
+    '| ' + header.join(' | ') + ' |',
+    '| ' + separator.join(' | ') + ' |',
+    ...data.map(row => '| ' + row.join(' | ') + ' |')
+  ].join('\n');
+};
+
+// Create table
+const table = createTable([
+  ['Status', 'Count'],
+  ['✅ Passed', String(passed)],
+  ['❌ Failed', String(failed)],
+  ['⏭️  Skipped', String(skipped)],
+  ['📊 Total', String(total)]
+]);
+
+let comment = '## 🧪 FTW Test Results\n\n';
+comment += table + '\n\n';
+
+if (failed > 0) {
+  comment += `### ❌ Failed Tests\n\n`;
+  
+  if (failedTestList.length > 0) {
+    failedTestList.forEach(testId => {
+      comment += `- \`${testId}\`\n`;
+    });
+    if (totalFailedCount > 5) {
+      comment += `- _and ${totalFailedCount - 5} more..._\n`;
+    }
+    comment += '\n';
+  }
+  
+  const logsUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+  comment += `See the [workflow logs](${logsUrl}) for details.\n\n`;
+}
+
+// Find existing comment
+const { data: comments } = await github.rest.issues.listComments({
+  owner: context.repo.owner,
+  repo: context.repo.repo,
+  issue_number: context.issue.number,
+});
+
+const botComment = comments.find(comment => 
+  comment.user.type === 'Bot' && 
+  comment.body.includes('🧪 FTW Test Results')
+);
+
+if (botComment) {
+  await github.rest.issues.updateComment({
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    comment_id: botComment.id,
+    body: comment
+  });
+} else {
+  await github.rest.issues.createComment({
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    issue_number: context.issue.number,
+    body: comment
+  });
+}
