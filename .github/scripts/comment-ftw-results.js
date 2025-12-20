@@ -48,10 +48,10 @@ module.exports = async ({ github, context, core }) => {
 
       // Log unsuccessful tests
       console.log('Failed tests:\n' + failedTestList.map(t => `- ${t}`).join('\n'));
-      console.log('Skipped tests:\n' + (typeof skippedTestList !== 'undefined' ? skippedTestList.map(t => `- ${t}`).join('\n') : ''));
-      console.log('Ignored tests:\n' + (typeof ignoredTestList !== 'undefined' ? ignoredTestList.map(t => `- ${t}`).join('\n') : ''));
-      console.log('Forced pass tests:\n' + (typeof forcedPassTestList !== 'undefined' ? forcedPassTestList.map(t => `- ${t}`).join('\n') : ''));
-      console.log('Forced fail tests:\n' + (typeof forcedFailTestList !== 'undefined' ? forcedFailTestList.map(t => `- ${t}`).join('\n') : ''));
+      console.log('Skipped tests:\n' + skippedTestList.map(t => `- ${t}`).join('\n'));
+      console.log('Ignored tests:\n' + ignoredTestList.map(t => `- ${t}`).join('\n'));
+      console.log('Forced pass tests:\n' + forcedPassTestList.map(t => `- ${t}`).join('\n'));
+      console.log('Forced fail tests:\n' + forcedFailTestList.map(t => `- ${t}`).join('\n'));
     } else {
       console.log(`FTW results file not found at: ${jsonPath}`);
     }
