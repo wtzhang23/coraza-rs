@@ -47,11 +47,11 @@ module.exports = async ({ github, context, core }) => {
       console.log(`Parsed results: total=${total}, passed=${succeeded.length}, failed=${failed.length}, skipped=${skipped.length}, ignored=${ignored.length}, forced-pass=${forcedPass.length}, forced-fail=${forcedFail.length}`);
 
       // Log unsuccessful tests
-      console.log('Failed tests:\n' + failed.map(t => `- ${t}`).join('\n'));
-      console.log('Skipped tests:\n' + skipped.map(t => `- ${t}`).join('\n'));
-      console.log('Ignored tests:\n' + ignored.map(t => `- ${t}`).join('\n'));
-      console.log('Forced pass tests:\n' + forcedPass.map(t => `- ${t}`).join('\n'));
-      console.log('Forced fail tests:\n' + forcedFail.map(t => `- ${t}`).join('\n'));
+      console.log('Failed tests:\n' + failed.length > 0 ? failed.map(t => `- ${t}`).join('\n') : 'None');
+      console.log('Skipped tests:\n' + skipped.length > 0 ? skipped.map(t => `- ${t}`).join('\n') : 'None');
+      console.log('Ignored tests:\n' + ignored.length > 0 ? ignored.map(t => `- ${t}`).join('\n') : 'None');
+      console.log('Forced pass tests:\n' + forcedPass.length > 0 ? forcedPass.map(t => `- ${t}`).join('\n') : 'None');
+      console.log('Forced fail tests:\n' + forcedFail.length > 0 ? forcedFail.map(t => `- ${t}`).join('\n') : 'None');
     } else {
       console.log(`FTW results file not found at: ${jsonPath}`);
     }
@@ -90,15 +90,13 @@ module.exports = async ({ github, context, core }) => {
   if (failed.length > 0) {
     comment += `### ❌ Failed Tests\n\n`;
     
-    if (failed.length > 0) {
-      failed.slice(0, 5).forEach(testId => {
-        comment += `- \`${testId}\`\n`;
-      });
-      if (failed.length > 5) {
-        comment += `- _and ${failed.length - 5} more..._\n`;
-      }
-      comment += '\n';
+    failed.slice(0, 5).forEach(testId => {
+      comment += `- \`${testId}\`\n`;
+    });
+    if (failed.length > 5) {
+      comment += `- _and ${failed.length - 5} more..._\n`;
     }
+    comment += '\n';
     
     const logsUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
     comment += `See the [workflow logs](${logsUrl}) for details.\n\n`;
