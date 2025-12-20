@@ -10,33 +10,47 @@ module.exports = async ({ github, context, core }) => {
   let passed = 0;
   let failed = 0;
   let skipped = 0;
+  let ignored = 0;
+  let forcedPass = 0;
+  let forcedFail = 0;
   let failedTestList = [];
   let totalFailedCount = 0;
 
   try {
     const jsonPath = path.isAbsolute(jsonFilePath) ? jsonFilePath : path.join(process.cwd(), jsonFilePath);
+    console.log(`Looking for FTW results at: ${jsonPath}`);
+    console.log(`Current working directory: ${process.cwd()}`);
+    
     if (fs.existsSync(jsonPath)) {
-      const content = fs.readFileSync(jsonPath, 'utf8');
-      const jsonData = JSON.parse(content);
+      console.log(`Found FTW results file`);
+      let content = fs.readFileSync(jsonPath, 'utf8');
       
-      total = jsonData.total || 0;
-      passed = jsonData.passed || 0;
-      failed = jsonData.failed || 0;
-      skipped = jsonData.skipped || 0;
+      const jsonData = JSON.parse(content);
+      console.log(`Parsed JSON data:`, JSON.stringify(jsonData, null, 2));
+      
+      // FTW JSON format: {"run": <total>, "success": [...], "failed": [...], "skipped": [...], "ignored": [...], "forced-pass": [...], "forced-fail": [...]}
+      total = jsonData.run || 0;
+      passed = Array.isArray(jsonData.success) ? jsonData.success.length : 0;
+      failed = Array.isArray(jsonData.failed) ? jsonData.failed.length : 0;
+      skipped = Array.isArray(jsonData.skipped) ? jsonData.skipped.length : 0;
+      ignored = Array.isArray(jsonData.ignored) ? jsonData.ignored.length : 0;
+      forcedPass = Array.isArray(jsonData['forced-pass']) ? jsonData['forced-pass'].length : 0;
+      forcedFail = Array.isArray(jsonData['forced-fail']) ? jsonData['forced-fail'].length : 0;
       
       // Extract failed test IDs
-      if (jsonData.tests && Array.isArray(jsonData.tests)) {
-        const allFailed = jsonData.tests
-          .filter(t => t.result === 'failed' || t.status === 'failed')
-          .map(t => t.test_id)
-          .filter(id => id);
-        totalFailedCount = allFailed.length;
-        failedTestList = allFailed.slice(0, 5);
+      if (Array.isArray(jsonData.failed)) {
+        totalFailedCount = jsonData.failed.length;
+        failedTestList = jsonData.failed.slice(0, 5);
       }
+      
+      console.log(`Parsed results: total=${total}, passed=${passed}, failed=${failed}, skipped=${skipped}, ignored=${ignored}, forced-pass=${forcedPass}, forced-fail=${forcedFail}`);
+    } else {
+      console.log(`FTW results file not found at: ${jsonPath}`);
     }
   } catch (e) {
     // If parsing fails, use defaults (all zeros)
     console.log('Error parsing FTW results:', e.message);
+    console.log('Stack trace:', e.stack);
   }
 
   // Helper function to create markdown table
@@ -53,10 +67,13 @@ module.exports = async ({ github, context, core }) => {
   // Create table
   const table = createTable([
     ['Status', 'Count'],
-    ['✅ Passed', String(passed)],
+    ['✅ Success', String(passed)],
     ['❌ Failed', String(failed)],
     ['⏭️  Skipped', String(skipped)],
-    ['📊 Total', String(total)]
+    ['🚫 Ignored', String(ignored)],
+    ['✅ Forced Pass', String(forcedPass)],
+    ['❌ Forced Fail', String(forcedFail)],
+    ['📊 Run', String(total)]
   ]);
 
   let comment = '## 🧪 FTW Test Results\n\n';
