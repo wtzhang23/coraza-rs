@@ -147,9 +147,7 @@ jobs:
           docker compose run --rm -T \
             ftw
 
-          cat /workspace-output/ftw-results.json
-
-      - name: Comment on PR
+      - name: Comment on PR and Dump Results
         if: github.event_name == 'pull_request' && always()
         uses: actions/github-script@v7
         env:

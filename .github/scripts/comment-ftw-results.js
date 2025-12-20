@@ -7,7 +7,7 @@ module.exports = async ({ github, context, core }) => {
 
   // Parse JSON file directly
   let total = 0;
-  let passed = 0;
+  let succeeded = 0;
   let failed = 0;
   let skipped = 0;
   let ignored = 0;
@@ -26,11 +26,10 @@ module.exports = async ({ github, context, core }) => {
       let content = fs.readFileSync(jsonPath, 'utf8');
       
       const jsonData = JSON.parse(content);
-      console.log(`Parsed JSON data:`, JSON.stringify(jsonData, null, 2));
       
       // FTW JSON format: {"run": <total>, "success": [...], "failed": [...], "skipped": [...], "ignored": [...], "forced-pass": [...], "forced-fail": [...]}
       total = jsonData.run || 0;
-      passed = Array.isArray(jsonData.success) ? jsonData.success.length : 0;
+      succeeded = Array.isArray(jsonData.success) ? jsonData.success.length : 0;
       failed = Array.isArray(jsonData.failed) ? jsonData.failed.length : 0;
       skipped = Array.isArray(jsonData.skipped) ? jsonData.skipped.length : 0;
       ignored = Array.isArray(jsonData.ignored) ? jsonData.ignored.length : 0;
@@ -43,7 +42,14 @@ module.exports = async ({ github, context, core }) => {
         failedTestList = jsonData.failed.slice(0, 5);
       }
       
-      console.log(`Parsed results: total=${total}, passed=${passed}, failed=${failed}, skipped=${skipped}, ignored=${ignored}, forced-pass=${forcedPass}, forced-fail=${forcedFail}`);
+      console.log(`Parsed results: total=${total}, passed=${succeeded}, failed=${failed}, skipped=${skipped}, ignored=${ignored}, forced-pass=${forcedPass}, forced-fail=${forcedFail}`);
+
+      // Log unsuccessful tests
+      console.log('Failed tests:\n' + failedTestList.map(t => `- ${t}`).join('\n'));
+      console.log('Skipped tests:\n' + (typeof skippedTestList !== 'undefined' ? skippedTestList.map(t => `- ${t}`).join('\n') : ''));
+      console.log('Ignored tests:\n' + (typeof ignoredTestList !== 'undefined' ? ignoredTestList.map(t => `- ${t}`).join('\n') : ''));
+      console.log('Forced pass tests:\n' + (typeof forcedPassTestList !== 'undefined' ? forcedPassTestList.map(t => `- ${t}`).join('\n') : ''));
+      console.log('Forced fail tests:\n' + (typeof forcedFailTestList !== 'undefined' ? forcedFailTestList.map(t => `- ${t}`).join('\n') : ''));
     } else {
       console.log(`FTW results file not found at: ${jsonPath}`);
     }
@@ -67,7 +73,7 @@ module.exports = async ({ github, context, core }) => {
   // Create table
   const table = createTable([
     ['Status', 'Count'],
-    ['✅ Success', String(passed)],
+    ['✅ Success', String(succeeded)],
     ['❌ Failed', String(failed)],
     ['⏭️  Skipped', String(skipped)],
     ['🚫 Ignored', String(ignored)],
