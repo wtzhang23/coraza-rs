@@ -55,7 +55,7 @@ module.exports = async ({ github, context, core }) => {
   }
 
   // Helper function to create markdown table
-  const createTable = (rows) => {
+  const createMarkdownTable = (rows) => {
     const [header, ...data] = rows;
     const separator = header.map(() => '---');
     return [
@@ -66,7 +66,7 @@ module.exports = async ({ github, context, core }) => {
   };
 
   // Create table
-  const table = createTable([
+  const tableRows = [
     ['Status', 'Count'],
     ['✅ Success', String(succeeded.length)],
     ['❌ Failed', String(failed.length)],
@@ -75,19 +75,19 @@ module.exports = async ({ github, context, core }) => {
     ['✅ Forced Pass', String(forcedPass.length)],
     ['❌ Forced Fail', String(forcedFail.length)],
     ['📊 Run', String(total)]
-  ]);
+  ]
 
   // Write unsuccessful tests to workflow output
-  core.summary.addHeading('FTW Test Results').addRaw(table).write();
-  core.summary.addHeading('Failed tests').addRaw(failed.length > 0 ? failed.map(t => `- ${t}`).join('\n') : 'None').write();
-  core.summary.addHeading('Skipped tests').addRaw(skipped.length > 0 ? skipped.map(t => `- ${t}`).join('\n') : 'None').write();
-  core.summary.addHeading('Ignored tests').addRaw(ignored.length > 0 ? ignored.map(t => `- ${t}`).join('\n') : 'None').write();
-  core.summary.addHeading('Forced pass tests').addRaw(forcedPass.length > 0 ? forcedPass.map(t => `- ${t}`).join('\n') : 'None').write();
-  core.summary.addHeading('Forced fail tests').addRaw(forcedFail.length > 0 ? forcedFail.map(t => `- ${t}`).join('\n') : 'None').write();
+  core.summary.addHeading('FTW Test Results').addTable(tableRows).write();
+  core.summary.addHeading('Failed tests').addList(failed, true).write();
+  core.summary.addHeading('Skipped tests').addList(skipped, true).write();
+  core.summary.addHeading('Ignored tests').addList(ignored, true).write();
+  core.summary.addHeading('Forced pass tests').addList(forcedPass, true).write();
+  core.summary.addHeading('Forced fail tests').addList(forcedFail, true).write();
 
   let comment = '## 🧪 FTW Test Results\n\n';
   comment += '<sub><i>This was run for the commit [${context.sha}](https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${context.sha})</i></sub>\n\n';
-  comment += table + '\n\n';
+  comment += createMarkdownTable(tableRows) + '\n\n';
 
   if (failed.length > 0) {
     comment += `### ❌ Failed Tests\n\n`;
