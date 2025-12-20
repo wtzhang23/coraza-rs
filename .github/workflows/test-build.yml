@@ -112,6 +112,9 @@ jobs:
   ftw:
     runs-on: ubuntu-latest
     needs: build-image
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -133,17 +136,27 @@ jobs:
         working-directory: ftw
         id: ftw-tests
         continue-on-error: true
+        env:
+          FTW_ARGS: --output json --show-failures-only
+          FTW_OUTPUT_PATH: /workspace-output/ftw-results.json
         run: |
           docker compose build --pull
-          docker compose run --rm ftw 2>&1 | tee ftw-output.log || true
+          # Use -T to disable TTY allocation and ensure unbuffered output
+          # Use FTW_OUTPUT_PATH to isolate JSON output from other logs
+          # The workspace-output volume is mounted at /workspace-output in the container
+          docker compose run --rm -T \
+            ftw
 
-      - name: Upload FTW test results
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Output Results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        env:
+          FTW_RESULTS_JSON_PATH: ftw/ftw-results.json
         with:
-          name: ftw-test-results
-          path: ftw/ftw-output.log
-          retention-days: 30
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const script = require('./.github/scripts/comment-ftw-results.js');
+            await script({ github, context, core });
 
   examples:
     runs-on: ubuntu-latest

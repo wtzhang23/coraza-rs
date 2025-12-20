@@ -37,10 +37,31 @@ The CRS rules are embedded in Coraza via rootfs and referenced using `@owasp_crs
 
 - `ENVOY_IMAGE`: Envoy image to use (default: `envoy-with-coraza-module:latest`)
 - `ENVOY_CONFIG`: Envoy configuration file path (default: `/conf/envoy-config.yaml`)
-- `FTW_CLOUDMODE`: Enable cloud mode for FTW tests (default: `false`)
-- `FTW_INCLUDE`: Include specific test patterns (e.g., `-i 941100`)
+- `FTW_ARGS`: FTW command-line flags. See [FTW documentation](https://github.com/coreruleset/go-ftw) for available options.
 
-Example:
+Examples:
 ```bash
-FTW_INCLUDE="-i 941100" docker compose run --rm ftw
+# Run with default settings
+docker compose run --rm ftw
+
+# Run specific tests (use test ID pattern, e.g., 911100 matches all tests in that file)
+FTW_ARGS="-i 911100" docker compose run --rm ftw
+
+# Run a specific test by ID (e.g., 911100-5)
+FTW_ARGS="-i 911100-5" docker compose run --rm ftw
+
+# Use GitHub Actions output format with failures only
+FTW_ARGS="--output github --show-failures-only" docker compose run --rm ftw
+
+# Use JSON output format
+FTW_ARGS="--output json" docker compose run --rm ftw
+
+# Use quiet output format
+FTW_ARGS="--output quiet" docker compose run --rm ftw
+
+# Enable cloud mode
+FTW_ARGS="--cloud true" docker compose run --rm ftw
+
+# Combine multiple flags
+FTW_ARGS="--output github --show-failures-only --cloud false -i 911100" docker compose run --rm ftw
 ```

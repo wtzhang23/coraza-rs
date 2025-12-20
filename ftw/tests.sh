@@ -34,8 +34,26 @@ fi
 echo -e "\n[Ok] Got status code $status_code, expected 200. Ready to start."
 
 
-FTW_CLOUDMODE=${FTW_CLOUDMODE:-false}
+# Allow users to pass FTW flags via FTW_ARGS environment variable
+# Example: FTW_ARGS="--output github --show-failures-only --cloud false -i 941100"
+FTW_ARGS=${FTW_ARGS:-""}
 
-FTW_INCLUDE=$([ "${FTW_INCLUDE}" == "" ] && echo "" || echo "-i ${FTW_INCLUDE}")
+# Allow users to specify a path for FTW output (useful for isolating JSON output)
+# If FTW_OUTPUT_PATH is set, redirect FTW output to that file
+FTW_OUTPUT_PATH=${FTW_OUTPUT_PATH:-""}
 
-/ftw run -d coreruleset/tests/regression/tests --config ftw.yml --read-timeout=30s --cloud=$FTW_CLOUDMODE $FTW_INCLUDE
+# Run FTW tests with configured flags
+# Note: $FTW_ARGS is intentionally unquoted to allow word splitting
+# coraza-coreruleset has tests in coreruleset/tests
+if [ -n "$FTW_OUTPUT_PATH" ]; then
+  # Output FTW results to the specified path (isolated from other logs)
+  # Only redirect stdout to preserve JSON; stderr goes to stderr (visible in logs)
+  /ftw run -d coreruleset/tests --config ftw.yml --read-timeout=30s ${FTW_ARGS} > "$FTW_OUTPUT_PATH"
+  FTW_EXIT_CODE=$?
+  # Also output to stdout for visibility (but JSON will be in the file)
+  echo "FTW results saved to $FTW_OUTPUT_PATH"
+  exit $FTW_EXIT_CODE
+else
+  # Run normally, output to stdout/stderr
+  /ftw run -d coreruleset/tests --config ftw.yml --read-timeout=30s ${FTW_ARGS}
+fi
