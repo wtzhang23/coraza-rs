@@ -86,6 +86,7 @@ module.exports = async ({ github, context, core }) => {
   core.summary.addHeading('Forced fail tests').addRaw(forcedFail.length > 0 ? forcedFail.map(t => `- ${t}`).join('\n') : 'None').write();
 
   let comment = '## 🧪 FTW Test Results\n\n';
+  comment += '<sub><i>This was run for the commit [${context.sha}](https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${context.sha})</i></sub>\n\n';
   comment += table + '\n\n';
 
   if (failed.length > 0) {
