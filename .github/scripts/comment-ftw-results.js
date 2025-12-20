@@ -86,7 +86,9 @@ module.exports = async ({ github, context, core }) => {
   core.summary.addHeading('Forced fail tests').addList(forcedFail, true).write();
 
   let comment = '## 🧪 FTW Test Results\n\n';
-  comment += `<sub><i>This was run for the commit [${context.sha}](https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${context.sha})</i></sub>\n\n`;
+  const logsUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+  const commitUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${context.sha}`;
+  comment += `<sub><i>This was run for the commit [${context.sha}](${commitUrl}). See the [workflow logs](${logsUrl}) for details.</i></sub>\n\n`;
   comment += createMarkdownTable(tableRows) + '\n\n';
 
   if (failed.length > 0) {
@@ -99,9 +101,6 @@ module.exports = async ({ github, context, core }) => {
       comment += `- _and ${failed.length - 5} more..._\n`;
     }
     comment += '\n';
-    
-    const logsUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-    comment += `See the [workflow logs](${logsUrl}) for details.\n\n`;
   }
 
   // Find existing comment
