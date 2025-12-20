@@ -29,29 +29,29 @@ module.exports = async ({ github, context, core }) => {
       
       // FTW JSON format: {"run": <total>, "success": [...], "failed": [...], "skipped": [...], "ignored": [...], "forced-pass": [...], "forced-fail": [...]}
       total = jsonData.run || 0;
-      succeeded = Array.isArray(jsonData.success) ? jsonData.success.length : 0;
-      failed = Array.isArray(jsonData.failed) ? jsonData.failed.length : 0;
-      skipped = Array.isArray(jsonData.skipped) ? jsonData.skipped.length : 0;
-      ignored = Array.isArray(jsonData.ignored) ? jsonData.ignored.length : 0;
-      forcedPass = Array.isArray(jsonData['forced-pass']) ? jsonData['forced-pass'].length : 0;
-      forcedFail = Array.isArray(jsonData['forced-fail']) ? jsonData['forced-fail'].length : 0;
+      succeeded = Array.isArray(jsonData.success) ? jsonData.success : [];
+      failed = Array.isArray(jsonData.failed) ? jsonData.failed : [];
+      skipped = Array.isArray(jsonData.skipped) ? jsonData.skipped : [];
+      ignored = Array.isArray(jsonData.ignored) ? jsonData.ignored : [];
+      forcedPass = Array.isArray(jsonData['forced-pass']) ? jsonData['forced-pass'] : [];
+      forcedFail = Array.isArray(jsonData['forced-fail']) ? jsonData['forced-fail'] : [];
 
       // Sort all arrays
-      jsonData.success.sort();
-      jsonData.failed.sort();
-      jsonData.skipped.sort();
-      jsonData.ignored.sort();
-      jsonData['forced-pass'].sort();
-      jsonData['forced-fail'].sort();
+      succeeded.sort();
+      failed.sort();
+      skipped.sort();
+      ignored.sort();
+      forcedPass.sort();
+      forcedFail.sort();
       
-      console.log(`Parsed results: total=${total}, passed=${succeeded}, failed=${failed}, skipped=${skipped}, ignored=${ignored}, forced-pass=${forcedPass}, forced-fail=${forcedFail}`);
+      console.log(`Parsed results: total=${total}, passed=${succeeded.length}, failed=${failed.length}, skipped=${skipped.length}, ignored=${ignored.length}, forced-pass=${forcedPass.length}, forced-fail=${forcedFail.length}`);
 
       // Log unsuccessful tests
-      console.log('Failed tests:\n' + failedTestList.map(t => `- ${t}`).join('\n'));
-      console.log('Skipped tests:\n' + skippedTestList.map(t => `- ${t}`).join('\n'));
-      console.log('Ignored tests:\n' + ignoredTestList.map(t => `- ${t}`).join('\n'));
-      console.log('Forced pass tests:\n' + forcedPassTestList.map(t => `- ${t}`).join('\n'));
-      console.log('Forced fail tests:\n' + forcedFailTestList.map(t => `- ${t}`).join('\n'));
+      console.log('Failed tests:\n' + failed.map(t => `- ${t}`).join('\n'));
+      console.log('Skipped tests:\n' + skipped.map(t => `- ${t}`).join('\n'));
+      console.log('Ignored tests:\n' + ignored.map(t => `- ${t}`).join('\n'));
+      console.log('Forced pass tests:\n' + forcedPass.map(t => `- ${t}`).join('\n'));
+      console.log('Forced fail tests:\n' + forcedFail.map(t => `- ${t}`).join('\n'));
     } else {
       console.log(`FTW results file not found at: ${jsonPath}`);
     }
@@ -75,19 +75,19 @@ module.exports = async ({ github, context, core }) => {
   // Create table
   const table = createTable([
     ['Status', 'Count'],
-    ['✅ Success', String(succeeded)],
-    ['❌ Failed', String(failed)],
-    ['⏭️  Skipped', String(skipped)],
-    ['🚫 Ignored', String(ignored)],
-    ['✅ Forced Pass', String(forcedPass)],
-    ['❌ Forced Fail', String(forcedFail)],
+    ['✅ Success', String(succeeded.length)],
+    ['❌ Failed', String(failed.length)],
+    ['⏭️  Skipped', String(skipped.length)],
+    ['🚫 Ignored', String(ignored.length)],
+    ['✅ Forced Pass', String(forcedPass.length)],
+    ['❌ Forced Fail', String(forcedFail.length)],
     ['📊 Run', String(total)]
   ]);
 
   let comment = '## 🧪 FTW Test Results\n\n';
   comment += table + '\n\n';
 
-  if (failed > 0) {
+  if (failed.length > 0) {
     comment += `### ❌ Failed Tests\n\n`;
     
     if (failed.length > 0) {
