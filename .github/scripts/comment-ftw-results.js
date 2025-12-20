@@ -45,13 +45,6 @@ module.exports = async ({ github, context, core }) => {
       forcedFail.sort();
       
       console.log(`Parsed results: total=${total}, passed=${succeeded.length}, failed=${failed.length}, skipped=${skipped.length}, ignored=${ignored.length}, forced-pass=${forcedPass.length}, forced-fail=${forcedFail.length}`);
-
-      // Log unsuccessful tests
-      console.log('Failed tests:\n' + failed.length > 0 ? failed.map(t => `- ${t}`).join('\n') : 'None');
-      console.log('Skipped tests:\n' + skipped.length > 0 ? skipped.map(t => `- ${t}`).join('\n') : 'None');
-      console.log('Ignored tests:\n' + ignored.length > 0 ? ignored.map(t => `- ${t}`).join('\n') : 'None');
-      console.log('Forced pass tests:\n' + forcedPass.length > 0 ? forcedPass.map(t => `- ${t}`).join('\n') : 'None');
-      console.log('Forced fail tests:\n' + forcedFail.length > 0 ? forcedFail.map(t => `- ${t}`).join('\n') : 'None');
     } else {
       console.log(`FTW results file not found at: ${jsonPath}`);
     }
@@ -60,6 +53,14 @@ module.exports = async ({ github, context, core }) => {
     console.log('Error parsing FTW results:', e.message);
     console.log('Stack trace:', e.stack);
   }
+
+  // Write unsuccessful tests to workflow output
+  core.summary.addHeading('FTW Test Results').addRaw(table).write();
+  core.summary.addHeading('Failed tests').addRaw(failed.length > 0 ? failed.map(t => `- ${t}`).join('\n') : 'None').write();
+  core.summary.addHeading('Skipped tests').addRaw(skipped.length > 0 ? skipped.map(t => `- ${t}`).join('\n') : 'None').write();
+  core.summary.addHeading('Ignored tests').addRaw(ignored.length > 0 ? ignored.map(t => `- ${t}`).join('\n') : 'None').write();
+  core.summary.addHeading('Forced pass tests').addRaw(forcedPass.length > 0 ? forcedPass.map(t => `- ${t}`).join('\n') : 'None').write();
+  core.summary.addHeading('Forced fail tests').addRaw(forcedFail.length > 0 ? forcedFail.map(t => `- ${t}`).join('\n') : 'None').write();
 
   // Helper function to create markdown table
   const createTable = (rows) => {
