@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime/cgo"
 	"testing"
 
 	"github.com/corazawaf/coraza/v3"
@@ -34,7 +35,7 @@ func TestCoraza_add_get_args(t *testing.T) {
 	aa, aa_len := stringToC("aa")
 	bb, bb_len := stringToC("bb")
 	coraza_add_get_args(tt, aa, aa_len, bb, bb_len)
-	tx := ptrToTransactionHandle(tt)
+	tx := cgo.Handle(tt).Value().(*TransactionHandle)
 	txi := tx.tx.(plugintypes.TransactionState)
 	argsGet := txi.Variables().ArgsGet()
 	value := argsGet.Get("aa")
@@ -69,19 +70,8 @@ func TestTransactionInitialization(t *testing.T) {
 	if t2 == tt {
 		t.Fatal("Transactions are duplicated")
 	}
-	tx := ptrToTransactionHandle(tt)
+	tx := cgo.Handle(tt).Value().(*TransactionHandle)
 	tx.tx.ProcessConnection("127.0.0.1", 8080, "127.0.0.1", 80)
-}
-
-func TestTxCleaning(t *testing.T) {
-	config := coraza_new_waf_config()
-	err := nilWafError()
-	waf := coraza_new_waf(config, &err)
-	txPtr := coraza_new_transaction(waf)
-	coraza_free_transaction(txPtr)
-	if tx := ptrToTransactionHandle(txPtr); tx != nil {
-		t.Fatal("Transaction was not removed from the map")
-	}
 }
 
 func BenchmarkTransactionCreation(b *testing.B) {
@@ -102,7 +92,7 @@ func BenchmarkTransactionProcessing(b *testing.B) {
 	waf := coraza_new_waf(config, &err)
 	for i := 0; i < b.N; i++ {
 		txPtr := coraza_new_transaction(waf)
-		tx := ptrToTransactionHandle(txPtr)
+		tx := cgo.Handle(txPtr).Value().(*TransactionHandle)
 		tx.tx.ProcessConnection("127.0.0.1", 55555, "127.0.0.1", 80)
 		tx.tx.ProcessURI("https://www.example.com/some?params=123", "GET", "HTTP/1.1")
 		tx.tx.AddRequestHeader("Host", "www.example.com")
