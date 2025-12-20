@@ -81,22 +81,22 @@ module.exports = async ({ github, context, core }) => {
   core.summary.addHeading('FTW Test Results').addTable(tableRows).write();
   core.summary
     .addHeading('Failed tests')
-    [failed.length ? 'addList' : 'addRaw'](failed.length ? failed : 'None', true).write()
+    [failed.length ? 'addList' : 'addRaw'](failed.length ? failed : 'None').write()
   core.summary
     .addHeading('Skipped tests')
-    [skipped.length ? 'addList' : 'addRaw'](skipped.length ? skipped : 'None', true)
+    [skipped.length ? 'addList' : 'addRaw'](skipped.length ? skipped : 'None')
     .write()
   core.summary
     .addHeading('Ignored tests')
-    [ignored.length ? 'addList' : 'addRaw'](ignored.length ? ignored : 'None', true)
+    [ignored.length ? 'addList' : 'addRaw'](ignored.length ? ignored : 'None')
     .write()
   core.summary
     .addHeading('Forced pass tests')
-    [forcedPass.length ? 'addList' : 'addRaw'](forcedPass.length ? forcedPass : 'None', true)
+    [forcedPass.length ? 'addList' : 'addRaw'](forcedPass.length ? forcedPass : 'None')
     .write()
   core.summary
     .addHeading('Forced fail tests')
-    [forcedFail.length ? 'addList' : 'addRaw'](forcedFail.length ? forcedFail : 'None', true)
+    [forcedFail.length ? 'addList' : 'addRaw'](forcedFail.length ? forcedFail : 'None')
     .write();
 
   let comment = '## 🧪 FTW Test Results\n\n';
