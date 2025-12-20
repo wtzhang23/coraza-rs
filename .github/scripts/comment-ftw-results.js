@@ -35,6 +35,14 @@ module.exports = async ({ github, context, core }) => {
       ignored = Array.isArray(jsonData.ignored) ? jsonData.ignored.length : 0;
       forcedPass = Array.isArray(jsonData['forced-pass']) ? jsonData['forced-pass'].length : 0;
       forcedFail = Array.isArray(jsonData['forced-fail']) ? jsonData['forced-fail'].length : 0;
+
+      // Sort all arrays
+      jsonData.success.sort();
+      jsonData.failed.sort();
+      jsonData.skipped.sort();
+      jsonData.ignored.sort();
+      jsonData['forced-pass'].sort();
+      jsonData['forced-fail'].sort();
       
       // Extract failed test IDs
       if (Array.isArray(jsonData.failed)) {
