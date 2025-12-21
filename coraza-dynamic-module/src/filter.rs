@@ -390,14 +390,11 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
 /* Helper functions for processing the request.                       */
 /* ************************************************************** */
 impl CorazaFilter {
-    fn on_request_headers_helper<'a, 'b, EHF: EnvoyHttpFilter>(
-        &'a mut self,
+    fn on_request_headers_helper<EHF: EnvoyHttpFilter>(
+        &mut self,
         envoy_filter: &mut EHF,
         end_of_stream: bool,
-    ) -> AnyhowResult<Option<Intervention>>
-    where
-        'b: 'a,
-    {
+    ) -> AnyhowResult<Option<Intervention>> {
         if let Some(intervention) = self.transition_waf_request_state(WafRequestState::Headers)? {
             return Ok(Some(intervention));
         }
@@ -530,14 +527,11 @@ impl CorazaFilter {
         )
     }
 
-    fn on_request_body_helper<'a, 'b, EHF: EnvoyHttpFilter>(
-        &'a mut self,
+    fn on_request_body_helper<EHF: EnvoyHttpFilter>(
+        &mut self,
         envoy_filter: &mut EHF,
         end_of_stream: bool,
-    ) -> AnyhowResult<Option<Intervention>>
-    where
-        'b: 'a,
-    {
+    ) -> AnyhowResult<Option<Intervention>> {
         self.entered_response_body = true;
         if let Some(intervention) =
             self.transition_waf_request_state(WafRequestState::RequestBody)?
@@ -721,13 +715,12 @@ impl CorazaFilter {
 /* Helper functions for handling interventions.                   */
 /* ************************************************************** */
 impl CorazaFilter {
-    fn get_intervention<'a, 'b, F>(
+    fn get_intervention<'a, F>(
         &'a mut self,
         transition_to_finished: F,
         end_of_stream: bool,
     ) -> AnyhowResult<Option<Intervention>>
     where
-        'b: 'a,
         F: FnOnce(&'a mut Self) -> AnyhowResult<Option<Intervention>>,
     {
         let Some(tx) = self.tx.as_mut() else {
