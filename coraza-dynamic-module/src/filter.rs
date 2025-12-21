@@ -366,14 +366,16 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for CorazaFilter {
 
     fn on_stream_complete(&mut self, envoy_filter: &mut EHF) {
         // Process logging to generate audit logs
-        let _ = self.transition_waf_request_state(WafRequestState::Finished);
-        let _ = self.transition_waf_response_state(WafResponseState::Finished);
-        if let Some(tx) = self.tx.as_mut() {
-            tx.process_logging()
-                .inspect_err(|err| {
-                    envoy_log_debug!("Error in on_stream_complete: {:#}", err);
-                })
-                .ok();
+        if self
+            .on_stream_complete_helper()
+            .inspect_err(|err| {
+                envoy_log_debug!("Error in on_stream_complete: {:#}", err);
+            })
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            envoy_log_debug!("Got intervention after request completion");
         }
 
         // technically, this includes requests that didn't fully complete; but from the perspective of the
@@ -679,6 +681,40 @@ impl CorazaFilter {
 
         self.get_intervention(
             |this| this.transition_waf_response_state(WafResponseState::Finished),
+            true,
+        )
+    }
+}
+
+// ************************************************************** */
+/* Helper functions for handling the stream lifecycle.            */
+/* ************************************************************** */
+impl CorazaFilter {
+    fn on_stream_complete_helper(&mut self) -> AnyhowResult<Option<Intervention>> {
+        || -> AnyhowResult<Option<Intervention>> {
+            if let Some(intervention) =
+                self.transition_waf_request_state(WafRequestState::Finished)?
+            {
+                return Ok(Some(intervention));
+            }
+            if let Some(intervention) =
+                self.transition_waf_response_state(WafResponseState::Finished)?
+            {
+                return Ok(Some(intervention));
+            }
+            Ok(None)
+        }()?;
+        let Some(tx) = self.tx.as_mut() else {
+            return Ok(None);
+        };
+
+        tx.process_logging()
+            .inspect_err(|err| {
+                envoy_log_debug!("Error in on_stream_complete: {:#}", err);
+            })
+            .ok();
+        self.get_intervention(
+            |this| this.transition_waf_request_state(WafRequestState::Finished),
             true,
         )
     }
