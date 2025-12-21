@@ -1,6 +1,8 @@
 package main
 
 /*
+#include <stdlib.h>
+
 typedef enum coraza_log_level_t {
 	CORAZA_LOG_LEVEL_TRACE,
 	CORAZA_LOG_LEVEL_DEBUG,
@@ -56,7 +58,11 @@ func newLogger(ctx *C.void, cb C.coraza_log_cb) debuglog.Logger {
 			case debuglog.LevelError:
 				rawLevel = C.CORAZA_LOG_LEVEL_ERROR
 			}
-			C.call_log_cb(cb, unsafe.Pointer(ctx), C.coraza_log_level_t(rawLevel), C.CString(message), C.CString(fields))
+			cMsg := C.CString(message)
+			cFields := C.CString(fields)
+			defer C.free(unsafe.Pointer(cMsg))
+			defer C.free(unsafe.Pointer(cFields))
+			C.call_log_cb(cb, unsafe.Pointer(ctx), C.coraza_log_level_t(rawLevel), cMsg, cFields)
 		}
 	})
 	return logger
