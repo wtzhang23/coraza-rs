@@ -127,7 +127,9 @@ func coraza_add_error_callback_to_waf_config(c C.coraza_waf_config_t, cb C.coraz
 		case types.RuleSeverityDebug:
 			severity = C.CORAZA_SEVERITY_DEBUG
 		}
-		C.call_error_cb(cb, unsafe.Pointer(userData), C.coraza_severity_t(severity), C.CString(rule.ErrorLog()))
+		cMsg := C.CString(rule.ErrorLog())
+		defer C.free(unsafe.Pointer(cMsg))
+		C.call_error_cb(cb, unsafe.Pointer(userData), C.coraza_severity_t(severity), cMsg)
 	})
 }
 
