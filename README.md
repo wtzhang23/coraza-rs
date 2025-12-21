@@ -2,11 +2,11 @@
 
 ![FTW Tests](https://img.shields.io/endpoint?url=https://wtzhang23.github.io/coraza-rs/ftw/ftw-success-rate.json)
 
-Rust bindings and Envoy dynamic module for [libcoraza](https://github.com/corazawaf/libcoraza).
+Rust bindings and Envoy dynamic module for [coraza](https://github.com/corazawaf/coraza).
 
 ## Crates
 
-- **coraza-sys:** Raw bindings to [libcoraza](https://github.com/corazawaf/libcoraza) generated with [bindgen](https://github.com/rust-lang/rust-bindgen)
+- **coraza-sys:** Raw bindings to [coraza](https://github.com/corazawaf/coraza) inspired by [libcoraza](https://github.com/corazawaf/libcoraza) generated with [bindgen](https://github.com/rust-lang/rust-bindgen)
 - **coraza-rs:** An idiomatic, safe API built on top of `coraza-sys`
 - **coraza-dynamic-module:** A [dynamic module](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules) loadable by Envoy
 
