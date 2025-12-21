@@ -691,7 +691,7 @@ impl CorazaFilter {
 /* ************************************************************** */
 impl CorazaFilter {
     fn on_stream_complete_helper(&mut self) -> AnyhowResult<Option<Intervention>> {
-        || -> AnyhowResult<Option<Intervention>> {
+        let intervention_opt = || -> AnyhowResult<Option<Intervention>> {
             if let Some(intervention) =
                 self.transition_waf_request_state(WafRequestState::Finished)?
             {
@@ -713,10 +713,7 @@ impl CorazaFilter {
                 envoy_log_debug!("Error in on_stream_complete: {:#}", err);
             })
             .ok();
-        self.get_intervention(
-            |this| this.transition_waf_request_state(WafRequestState::Finished),
-            true,
-        )
+        Ok(intervention_opt)
     }
 }
 
