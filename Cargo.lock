@@ -108,6 +108,7 @@ dependencies = [
  "anyhow",
  "coraza-rs",
  "envoy-proxy-dynamic-modules-rust-sdk",
+ "glob",
  "http",
  "serde",
  "serde_json",
@@ -123,6 +124,7 @@ version = "0.1.0"
 dependencies = [
  "coraza-sys",
  "http",
+ "libc",
  "parking_lot",
  "serde",
  "strum",

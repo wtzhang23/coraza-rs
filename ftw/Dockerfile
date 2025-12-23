@@ -10,7 +10,7 @@ WORKDIR /workspace
 
 ARG CRS_VERSION=v4.21.0
 
-# Download CRS tests only (rules and configs are embedded in coraza via rootfs)
+# Download CRS tests and rules
 ADD https://github.com/corazawaf/coraza-coreruleset/archive/refs/tags/${CRS_VERSION}.tar.gz /tmp/coreruleset.tar.gz
 RUN cd /tmp && tar -xf coreruleset.tar.gz && \
     mv coraza-coreruleset-* /workspace/coreruleset && \

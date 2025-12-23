@@ -44,20 +44,20 @@ static_resources:
                               "default": {
                                 "rules": [
                                   {
-                                    "type": "inline",
-                                    "value": "Include @coraza.conf-recommended"
+                                    "type": "file",
+                                    "value": "/coreruleset/@coraza.conf-recommended"
                                   },
                                   {
-                                    "type": "inline",
-                                    "value": "Include @crs-setup.conf.example"
+                                    "type": "file",
+                                    "value": "/coreruleset/@crs-setup.conf.example"
                                   },
                                   {
                                     "type": "file",
                                     "value": "/conf/ftw-config.conf"
                                   },
                                   {
-                                    "type": "inline",
-                                    "value": "Include @owasp_crs/*.conf"
+                                    "type": "glob",
+                                    "value": "/coreruleset/@owasp_crs/*.conf"
                                   }
                                 ],
                                 "error_log": [

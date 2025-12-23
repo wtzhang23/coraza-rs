@@ -459,8 +459,8 @@ impl CorazaFilter {
                 .transpose()
                 .context("Failed to parse authority as UTF-8")?;
             if let Some(authority) = authority_opt {
-                tx.set_server_name(authority)
-                    .context("Failed to set server name")?;
+                // TODO: set server name
+
                 // CRS rules tend to expect Host even with HTTP/2, so we add it here.
                 tx.add_request_header(b"Host", authority.as_bytes())
                     .context("Failed to add Host header crafted from :authority")?;
