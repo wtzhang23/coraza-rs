@@ -40,16 +40,18 @@ pub enum LogLevel {
     Info,
     Warn,
     Error,
+    Unknown,
 }
 
-impl From<coraza_log_level_t> for LogLevel {
-    fn from(level: coraza_log_level_t) -> Self {
+impl From<coraza_debug_log_level_t> for LogLevel {
+    fn from(level: coraza_debug_log_level_t) -> Self {
         match level {
-            coraza_log_level_t::CORAZA_LOG_LEVEL_TRACE => LogLevel::Trace,
-            coraza_log_level_t::CORAZA_LOG_LEVEL_DEBUG => LogLevel::Debug,
-            coraza_log_level_t::CORAZA_LOG_LEVEL_INFO => LogLevel::Info,
-            coraza_log_level_t::CORAZA_LOG_LEVEL_WARN => LogLevel::Warn,
-            coraza_log_level_t::CORAZA_LOG_LEVEL_ERROR => LogLevel::Error,
+            coraza_debug_log_level_t::CORAZA_DEBUG_LOG_LEVEL_TRACE => LogLevel::Trace,
+            coraza_debug_log_level_t::CORAZA_DEBUG_LOG_LEVEL_DEBUG => LogLevel::Debug,
+            coraza_debug_log_level_t::CORAZA_DEBUG_LOG_LEVEL_INFO => LogLevel::Info,
+            coraza_debug_log_level_t::CORAZA_DEBUG_LOG_LEVEL_WARN => LogLevel::Warn,
+            coraza_debug_log_level_t::CORAZA_DEBUG_LOG_LEVEL_ERROR => LogLevel::Error,
+            coraza_debug_log_level_t::CORAZA_DEBUG_LOG_LEVEL_UNKNOWN => LogLevel::Unknown,
         }
     }
 }
@@ -79,6 +81,7 @@ pub enum Severity {
     Critical,
     Alert,
     Emergency,
+    Unknown,
 }
 
 impl From<coraza_severity_t> for Severity {
@@ -92,6 +95,7 @@ impl From<coraza_severity_t> for Severity {
             coraza_severity_t::CORAZA_SEVERITY_NOTICE => Severity::Notice,
             coraza_severity_t::CORAZA_SEVERITY_INFO => Severity::Info,
             coraza_severity_t::CORAZA_SEVERITY_DEBUG => Severity::Debug,
+            coraza_severity_t::CORAZA_SEVERITY_UNKNOWN => Severity::Unknown,
         }
     }
 }
@@ -135,20 +139,13 @@ impl WafConfig {
         context.log_callback = Some(Box::new(callback));
         if !self.added_raw_log_callback {
             unsafe {
-                coraza_add_log_callback_to_waf_config(
+                coraza_add_debug_log_callback(
                     self.inner,
                     Some(log_callback),
-                    std::ptr::null_mut(),
+                    context.as_ref().get_ref() as *const _ as *mut _,
                 );
             }
             self.added_raw_log_callback = true;
-        }
-        unsafe {
-            coraza_add_log_callback_to_waf_config(
-                self.inner,
-                Some(log_callback),
-                context.as_ref().get_ref() as *const _ as *mut _,
-            );
         }
     }
 
@@ -165,20 +162,13 @@ impl WafConfig {
         context.error_callback = Some(Box::new(callback));
         if !self.added_raw_error_callback {
             unsafe {
-                coraza_add_error_callback_to_waf_config(
+                coraza_add_error_callback(
                     self.inner,
                     Some(error_callback),
-                    std::ptr::null_mut(),
+                    context.as_ref().get_ref() as *const _ as *mut _,
                 );
             }
             self.added_raw_error_callback = true;
-        }
-        unsafe {
-            coraza_add_error_callback_to_waf_config(
-                self.inner,
-                Some(error_callback),
-                context.as_ref().get_ref() as *const _ as *mut _,
-            );
         }
     }
 
@@ -188,8 +178,8 @@ impl WafConfig {
     ///
     /// * `rules` - The rules to add.
     pub fn add_rules(&mut self, rule: &str) {
-        let len = rule.len();
-        unsafe { coraza_add_rules_to_waf_config(self.inner, rule.as_ptr() as *mut _, len) };
+        let rule = str_to_cstr_until_opt_null(rule);
+        unsafe { coraza_rules_add(self.inner, rule.as_ptr() as _) };
     }
 
     /// Add rules from a file to the WAF config.
@@ -198,10 +188,8 @@ impl WafConfig {
     ///
     /// * `file` - The file to add rules from.
     pub fn add_rules_from_file(&mut self, file: &str) {
-        let len = file.len();
-        unsafe {
-            coraza_add_rules_from_file_to_waf_config(self.inner, file.as_ptr() as *mut _, len)
-        };
+        let file = str_to_cstr_until_opt_null(file);
+        unsafe { coraza_rules_add_file(self.inner, file.as_ptr() as *mut _) };
     }
 }
 
@@ -256,24 +244,23 @@ impl Waf {
     ///
     /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
     pub fn new(config: Arc<WafConfig>) -> Result<Self> {
-        let mut raw_err = coraza_error_t {
-            msg: std::ptr::null_mut(),
-            msg_len: 0,
-        };
+        let mut raw_err: *mut std::ffi::c_char = std::ptr::null_mut();
         let inner = unsafe { coraza_new_waf(config.inner, &mut raw_err as *mut _) };
         if inner == 0 {
-            let err = if raw_err.msg.is_null() || raw_err.msg_len == 0 {
+            let err = if raw_err.is_null() {
                 String::new()
             } else {
                 unsafe {
-                    let slice =
-                        std::slice::from_raw_parts(raw_err.msg as *const u8, raw_err.msg_len);
-                    String::from_utf8_lossy(slice).to_string()
+                    std::ffi::CStr::from_ptr(raw_err)
+                        .to_string_lossy()
+                        .to_string()
                 }
             };
-            unsafe {
-                coraza_free_error(raw_err);
-            };
+            if !raw_err.is_null() {
+                unsafe {
+                    libc::free(raw_err as *mut _);
+                };
+            }
             return Err(Error::FailedToCreateWaf(err));
         }
         Ok(Self {
@@ -320,9 +307,8 @@ impl Waf {
     /// This method is thread-safe. See [coraza.WAF](https://pkg.go.dev/github.com/corazawaf/coraza/v3#WAF) for more details.
     /// However, due to crossing the FFI boundary, a lock is required internally to ensure thread safety.
     pub fn new_transaction_with_id(&self, id: &str) -> Option<Transaction> {
-        let len = id.len();
-        let inner =
-            unsafe { coraza_new_transaction_with_id(self.inner, id.as_ptr() as *mut _, len) };
+        let id = str_to_cstr_until_opt_null(id);
+        let inner = unsafe { coraza_new_transaction_with_id(self.inner, id.as_ptr() as *mut _) };
 
         if inner == 0 {
             return None;
@@ -365,16 +351,14 @@ impl Transaction {
         server_host: &str,
         server_port: u16,
     ) -> Result<()> {
-        let source_len = source_address.len();
-        let server_len = server_host.len();
+        let source_address = str_to_cstr_until_opt_null(source_address);
+        let server_host = str_to_cstr_until_opt_null(server_host);
         let rv = unsafe {
             coraza_process_connection(
                 self.inner,
                 source_address.as_ptr() as *mut _,
-                source_len,
                 client_port.into(),
                 server_host.as_ptr() as *mut _,
-                server_len,
                 server_port.into(),
             )
         };
@@ -413,41 +397,16 @@ impl Transaction {
     /// * `Err(Error::ProcessingFailed)` - If the URI was not processed successfully. This in practice
     ///   won't happen, but is included for completeness.
     pub fn process_uri(&mut self, uri: &str, method: &str, proto: &str) -> Result<()> {
-        let uri_len = uri.len();
-        let method_len = method.len();
-        let proto_len = proto.len();
+        let uri = str_to_cstr_until_opt_null(uri);
+        let method = str_to_cstr_until_opt_null(method);
+        let proto = str_to_cstr_until_opt_null(proto);
         let rv = unsafe {
             coraza_process_uri(
                 self.inner,
                 uri.as_ptr() as *mut _,
-                uri_len,
                 method.as_ptr() as *mut _,
-                method_len,
                 proto.as_ptr() as *mut _,
-                proto_len,
             )
-        };
-        if rv != 0 {
-            return Err(Error::ProcessingFailed);
-        }
-        Ok(())
-    }
-
-    /// Set the server name.
-    ///
-    /// # Arguments
-    ///
-    /// * `server_name` - The server name to set.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - If the server name was set successfully.
-    /// * `Err(Error::ProcessingFailed)` - If the server name was not set successfully. This in practice
-    ///   won't happen, but is included for completeness.
-    pub fn set_server_name(&mut self, server_name: &str) -> Result<()> {
-        let server_name_len = server_name.len();
-        let rv = unsafe {
-            coraza_set_server_name(self.inner, server_name.as_ptr() as *mut _, server_name_len)
         };
         if rv != 0 {
             return Err(Error::ProcessingFailed);
@@ -472,9 +431,9 @@ impl Transaction {
             coraza_add_request_header(
                 self.inner,
                 name.as_ptr() as *mut _,
-                name.len(),
+                name.len() as _,
                 value.as_ptr() as *mut _,
-                value.len(),
+                value.len() as _,
             )
         };
         if rv != 0 {
@@ -550,15 +509,13 @@ impl Transaction {
     /// * `Err(Error::ProcessingFailed)` - If the GET request argument was not added successfully. This in practice
     ///   won't happen, but is included for completeness.
     pub fn add_get_request_argument(&mut self, name: &str, value: &str) -> Result<()> {
-        let name_len = name.len();
-        let value_len = value.len();
+        let name = str_to_cstr_until_opt_null(name);
+        let value = str_to_cstr_until_opt_null(value);
         let rv = unsafe {
             coraza_add_get_args(
                 self.inner,
                 name.as_ptr() as *mut _,
-                name_len,
                 value.as_ptr() as *mut _,
-                value_len,
             )
         };
         if rv != 0 {
@@ -584,9 +541,9 @@ impl Transaction {
             coraza_add_response_header(
                 self.inner,
                 name.as_ptr() as *mut _,
-                name.len(),
+                name.len() as _,
                 value.as_ptr() as *mut _,
-                value.len(),
+                value.len() as _,
             )
         };
         if rv != 0 {
@@ -649,13 +606,12 @@ impl Transaction {
         status: http::StatusCode,
         proto: &str,
     ) -> Result<()> {
-        let proto_len = proto.len();
+        let proto = str_to_cstr_until_opt_null(proto);
         let rv = unsafe {
             coraza_process_response_headers(
                 self.inner,
                 status.as_u16().into(),
                 proto.as_ptr() as *mut _,
-                proto_len,
             )
         };
         if rv != 0 {
@@ -720,21 +676,17 @@ pub struct Intervention {
 impl Intervention {
     /// Get the action of the intervention.
     pub fn action(&self) -> std::result::Result<Option<InterventionAction>, &'_ str> {
-        if self.inner.action.is_null() || self.inner.action_len == 0 {
+        if self.inner.action.is_null() {
             return Ok(None);
         }
         // The action is converted from a golang string which is UTF-8 encoded, so this should never fail.
         let action = unsafe {
-            let slice =
-                std::slice::from_raw_parts(self.inner.action as *const u8, self.inner.action_len);
-            std::str::from_utf8(slice).expect("Failed to convert action to string")
+            let slice = std::ffi::CStr::from_ptr(self.inner.action)
+                .to_str()
+                .expect("Failed to convert action to string");
+            InterventionAction::from_str(slice).map_err(|_| slice)?
         };
-        if action.is_empty() {
-            return Ok(None);
-        }
-        Ok(Some(
-            InterventionAction::from_str(action).map_err(|_| action)?,
-        ))
+        Ok(Some(action))
     }
 
     /// Get the status code of the intervention.
@@ -752,7 +704,7 @@ impl Drop for Intervention {
 
 extern "C" fn log_callback(
     ctx: *mut std::ffi::c_void,
-    level: coraza_log_level_t,
+    level: coraza_debug_log_level_t,
     msg: *const std::ffi::c_char,
     fields: *const std::ffi::c_char,
 ) {
@@ -772,22 +724,36 @@ extern "C" fn log_callback(
     );
 }
 
-extern "C" fn error_callback(
-    ctx: *mut std::ffi::c_void,
-    severity: coraza_severity_t,
-    msg: *const std::ffi::c_char,
-) {
+extern "C" fn error_callback(ctx: *mut std::ffi::c_void, matched_rule: coraza_matched_rule_t) {
     let context = unsafe {
         (ctx as *mut WafCallbackContext)
             .as_mut()
             .expect("Failed to get context")
     };
-    (context.error_callback.as_ref().unwrap())(
-        severity.into(),
-        unsafe { std::ffi::CStr::from_ptr(msg) }
-            .to_string_lossy()
-            .to_string(),
-    );
+    let severity = unsafe { coraza_matched_rule_get_severity(matched_rule) };
+    let msg = unsafe {
+        let raw_err_log = coraza_matched_rule_get_error_log(matched_rule);
+        let msg = if raw_err_log.is_null() {
+            String::new().into()
+        } else {
+            std::ffi::CStr::from_ptr(raw_err_log).to_string_lossy()
+        }
+        .into_owned();
+        if !raw_err_log.is_null() {
+            libc::free(raw_err_log as *mut _);
+        }
+        msg
+    };
+    (context.error_callback.as_ref().unwrap())(severity.into(), msg);
+}
+
+fn str_to_cstr_until_opt_null(s: &str) -> std::ffi::CString {
+    if let Some(nul_pos) = s.as_bytes().iter().position(|b| *b == 0) {
+        std::ffi::CString::new(&s.as_bytes()[..nul_pos])
+            .expect("Failed to convert string to C string")
+    } else {
+        std::ffi::CString::new(s).expect("Failed to convert string to C string")
+    }
 }
 
 #[cfg(test)]
@@ -867,17 +833,6 @@ mod tests {
             }
             _ => panic!("Expected Error::FailedToCreateWaf"),
         }
-    }
-
-    #[test]
-    fn coreruleset_fs() {
-        let mut config = WafConfig::new();
-        config.add_rules("Include @owasp_crs/*.conf");
-        config.add_rules("Include @coraza.conf-recommended");
-        config.add_rules("Include @crs-setup.conf.example");
-        let config = Arc::new(config);
-        let waf = Waf::new(config).expect("Failed to create WAF");
-        waf.new_transaction().unwrap();
     }
 
     #[test]

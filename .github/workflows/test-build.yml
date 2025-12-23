@@ -42,10 +42,6 @@ jobs:
       - name: Run Rust tests
         run: cargo test --verbose
 
-      - name: Run Go tests
-        working-directory: coraza-sys/go/libcoraza
-        run: go test ./...
-
       - name: Build
         run: cargo build --verbose
 

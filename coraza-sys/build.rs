@@ -5,12 +5,11 @@ fn main() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let go = PathBuf::from(std::env::var("GO").unwrap_or("go".to_string()));
 
-    println!("cargo:rerun-if-changed=go/libcoraza/go.mod");
-    println!("cargo:rerun-if-changed=go/libcoraza/go.sum");
-    println!("cargo:rerun-if-changed=go/libcoraza/libcoraza.go");
-    println!("cargo:rerun-if-changed=go/libcoraza/log.go");
-    println!("cargo:rerun-if-changed=go/libcoraza/fs.go");
-    println!("cargo:rerun-if-changed=go/libcoraza/libcoraza_types.h");
+    println!("cargo:rerun-if-changed=go/libcoraza/libcoraza/go.mod");
+    println!("cargo:rerun-if-changed=go/libcoraza/libcoraza/go.sum");
+    println!("cargo:rerun-if-changed=go/libcoraza/libcoraza/coraza.go");
+    println!("cargo:rerun-if-changed=go/libcoraza/libcoraza/log.go");
+    println!("cargo:rerun-if-changed=go/libcoraza/libcoraza/libcoraza_types.h");
 
     let build_dir = out_dir.join("build");
     let src_dir = crate_dir.join("go/libcoraza").canonicalize().unwrap();
@@ -28,9 +27,8 @@ fn main() {
         .arg("cgo")
         .arg("-exportheader")
         .arg(build_dir.join("coraza.h"))
-        .arg(src_dir.join("libcoraza.go"))
-        .arg(src_dir.join("log.go"))
-        .arg(src_dir.join("fs.go"))
+        .arg(src_dir.join("libcoraza/coraza.go"))
+        .arg(src_dir.join("libcoraza/log.go"))
         .status()
         .expect("Failed to build headers");
     if !status.success() {
@@ -44,9 +42,8 @@ fn main() {
         .arg("-buildmode=c-archive")
         .arg("-o")
         .arg(build_dir.join("libcoraza.a"))
-        .arg(src_dir.join("libcoraza.go"))
-        .arg(src_dir.join("log.go"))
-        .arg(src_dir.join("fs.go"))
+        .arg(src_dir.join("libcoraza/coraza.go"))
+        .arg(src_dir.join("libcoraza/log.go"))
         .status()
         .expect("Failed to build coraza");
     if !status.success() {
@@ -68,7 +65,7 @@ fn main() {
         .derive_partialeq(true)
         .derive_partialord(true)
         .derive_hash(true)
-        .rustified_enum("coraza_log_level_t")
+        .rustified_enum("coraza_debug_log_level_t")
         .rustified_enum("coraza_severity_t")
         .generate()
         .expect("Unable to generate bindings");

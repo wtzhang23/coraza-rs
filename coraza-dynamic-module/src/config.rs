@@ -119,6 +119,7 @@ impl CorazaFilterConfigInner {
 #[serde(rename_all = "snake_case")]
 pub enum Rule {
     File(PathBuf),
+    Glob(String),
     Inline(String),
 }
 
@@ -148,6 +149,25 @@ impl CorazaFilterConfig {
                                 }
                             })?)
                         }
+                        Rule::Glob(glob) => {
+                            let files = glob::glob(glob)
+                                .inspect_err(|err| {
+                                    envoy_log_error!("Failed to glob {}: {}", glob, err)
+                                })
+                                .ok()?;
+                            for file in files {
+                                let file = file
+                                    .inspect_err(|err| {
+                                        envoy_log_error!("Failed to get file path: {}", err)
+                                    })
+                                    .ok()?;
+                                config.add_rules_from_file(file.to_str().tap(|opt| {
+                                    if opt.is_none() {
+                                        envoy_log_error!("Failed to convert path to string")
+                                    }
+                                })?)
+                            }
+                        }
                         Rule::Inline(directive) => config.add_rules(directive),
                     }
                 }
@@ -175,13 +195,12 @@ impl CorazaFilterConfig {
                                     }
                                     Severity::Warning => envoy_log_warn!("{}", msg),
                                     Severity::Error => envoy_log_error!("{}", msg),
-                                    Severity::Critical => {
+                                    Severity::Critical
+                                    | Severity::Emergency
+                                    | Severity::Alert
+                                    | Severity::Unknown => {
                                         envoy_log_critical!("{}", msg)
                                     }
-                                    Severity::Emergency => {
-                                        envoy_log_critical!("{}", msg)
-                                    }
-                                    Severity::Alert => envoy_log_critical!("{}", msg),
                                 },
                             }
                         }
@@ -217,7 +236,7 @@ impl CorazaFilterConfig {
                                     LogLevel::Warn => {
                                         envoy_log_warn!("{} {}", msg, fields)
                                     }
-                                    LogLevel::Error => {
+                                    LogLevel::Error | LogLevel::Unknown => {
                                         envoy_log_error!("{} {}", msg, fields)
                                     }
                                 },

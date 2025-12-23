@@ -6,16 +6,20 @@ Rust bindings and Envoy dynamic module for [coraza](https://github.com/corazawaf
 
 ## Crates
 
-- **coraza-sys:** Raw bindings to [coraza](https://github.com/corazawaf/coraza) inspired by [libcoraza](https://github.com/corazawaf/libcoraza) generated with [bindgen](https://github.com/rust-lang/rust-bindgen)
+- **coraza-sys:** Raw bindings to [coraza](https://github.com/corazawaf/coraza) using the official [libcoraza](https://github.com/corazawaf/libcoraza) library (included as a git submodule) generated with [bindgen](https://github.com/rust-lang/rust-bindgen)
 - **coraza-rs:** An idiomatic, safe API built on top of `coraza-sys`
 - **coraza-dynamic-module:** A [dynamic module](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules) loadable by Envoy
 
 ## Building
 
 1. Install dependencies (Rust, Golang, and autotools). See the [Dockerfile](./Dockerfile) for details.
-2. Clone the repository with submodules:
+2. Clone the repository with submodules (required for the official libcoraza dependency):
    ```bash
    git clone --recursive <repository-url>
+   ```
+   If you've already cloned the repository, initialize and update submodules:
+   ```bash
+   git submodule update --init --recursive
    ```
 3. Build the release version:
    ```bash

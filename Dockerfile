@@ -27,6 +27,12 @@ RUN cargo build --release --package coraza-dynamic-module
 
 FROM envoyproxy/envoy:v1.36.4 AS runtime-base
 ENV ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/usr/local/lib
+# Download CRS rules
+ARG CRS_VERSION=v4.21.0
+ADD https://github.com/corazawaf/coraza-coreruleset/archive/refs/tags/${CRS_VERSION}.tar.gz /tmp/coreruleset.tar.gz
+RUN cd /tmp && tar -xf coreruleset.tar.gz && \
+    mv coraza-coreruleset-*/rules /coreruleset && \
+    rm -f coreruleset.tar.gz
 COPY --from=builder /target/release/libcoraza_dynamic_module.so /usr/local/lib/libcoraza_dynamic_module.so
 ENTRYPOINT ["envoy"]
 
